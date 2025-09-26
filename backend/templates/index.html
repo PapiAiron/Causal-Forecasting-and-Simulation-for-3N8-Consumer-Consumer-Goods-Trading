@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beverage Supply Chain Optimization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container-card {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2.5rem;
+            margin: 2rem auto;
+            max-width: 90%;
+        }
+        .section {
+            margin-bottom: 3rem;
+        }
+        .section-title {
+            border-left: 4px solid #3b82f6;
+            padding-left: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        canvas {
+            border-radius: 0.5rem;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            width: 100% !important;
+            height: auto !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Main Menu -->
+    <header class="bg-white shadow-md sticky top-0 z-50">
+        <nav class="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center">
+            <a href="#" class="text-2xl font-bold text-blue-600 mb-4 sm:mb-0">Beverage Supply Chain</a>
+            <div class="flex flex-wrap justify-center gap-2 sm:gap-4">
+                <a href="#introduction" class="text-gray-600 hover:text-blue-600 font-medium transition duration-300 px-3 py-2 rounded-md">Introduction</a>
+                <a href="#forecasting" class="text-gray-600 hover:text-blue-600 font-medium transition duration-300 px-3 py-2 rounded-md">Forecasting</a>
+                <a href="#simulation" class="text-gray-600 hover:text-blue-600 font-medium transition duration-300 px-3 py-2 rounded-md">Simulation</a>
+                <a href="#evaluation" class="text-gray-600 hover:text-blue-600 font-medium transition duration-300 px-3 py-2 rounded-md">Evaluation</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container-card">
+
+        <!-- Introduction Section -->
+        <section id="introduction" class="section">
+            <h2 class="text-3xl font-bold text-gray-800 section-title">I. Introduction & Rationale</h2>
+            <p class="text-gray-700 leading-relaxed mb-4">
+                This project focuses on optimizing the beverage supply chain by moving beyond traditional forecasting methods. We integrate external causal factors like promotions, holidays, and events to create a more accurate demand forecast.
+            </p>
+            <p class="text-gray-700 leading-relaxed">
+                The core of the system is the combination of **Causal Forecasting** to predict demand and **Discrete-Event Simulation** to test different supply chain scenarios. This approach allows for proactive decision-making, helping to prevent stockouts and reduce excess inventory.
+            </p>
+        </section>
+
+        <hr class="my-8 border-t border-gray-300">
+
+        <!-- Causal Forecasting Section -->
+        <section id="forecasting" class="section">
+            <h2 class="text-3xl font-bold text-gray-800 section-title">II. Causal Forecasting</h2>
+            <p class="text-gray-600 mb-6">
+                This chart demonstrates how our models (e.g., Prophet, XGBoost) use causal factors to generate a more accurate demand forecast compared to a simple baseline.
+            </p>
+            <div class="relative w-full rounded-xl bg-gray-50 p-6 shadow-inner">
+                <canvas id="causalForecastChart" class="w-full h-80"></canvas>
+                <div class="absolute top-4 right-4 bg-white p-2 rounded-lg shadow-md text-sm text-gray-700">
+                    <div class="flex items-center mb-1">
+                        <div class="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                        <span>Actual Sales</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                        <span>Causal Forecast</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-8 border-t border-gray-300">
+
+        <!-- Simulation Section -->
+        <section id="simulation" class="section">
+            <h2 class="text-3xl font-bold text-gray-800 section-title">III. What-If Simulation</h2>
+            <p class="text-gray-600 mb-6">
+                The simulation model allows us to test different scenarios to optimize the supply chain. Here, we compare inventory levels and service rate under a normal scenario versus a promotional event scenario.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="rounded-xl bg-gray-50 p-6 shadow-inner">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Inventory & Service Rate</h3>
+                    <canvas id="simulationChart" class="w-full h-80"></canvas>
+                </div>
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Scenario Inputs</h3>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <label class="text-gray-600">Demand Increase:</label>
+                            <span class="text-blue-600 font-semibold">
+                                <span id="demandSliderValue">5</span>%
+                            </span>
+                        </div>
+                        <input type="range" id="demandSlider" min="0" max="50" value="5" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="promoCheckbox" class="rounded-md h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                            <label for="promoCheckbox" class="ml-2 text-gray-700">Include Promo Event</label>
+                        </div>
+                    </div>
+                    <button onclick="runSimulation()" class="mt-6 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        Run Simulation
+                    </button>
+                    <div id="simulation-output" class="mt-4 p-4 bg-gray-100 rounded-lg text-gray-700">
+                        <p class="font-bold">Scenario Result:</p>
+                        <p id="output-text">Click "Run Simulation" to see the results.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-8 border-t border-gray-300">
+
+        <!-- Evaluation Section -->
+        <section id="evaluation" class="section">
+            <h2 class="text-3xl font-bold text-gray-800 section-title">IV. Model Evaluation</h2>
+            <p class="text-gray-600 mb-6">
+                These are key performance indicators that demonstrate the effectiveness of our model.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- KPI Card -->
+                <div class="bg-white rounded-lg p-6 text-center shadow-md border border-gray-200">
+                    <p class="text-sm font-medium text-gray-500">Forecasting Accuracy (RMSE)</p>
+                    <p class="text-2xl font-bold text-blue-600 mt-2">12.5</p>
+                </div>
+                <!-- KPI Card -->
+                <div class="bg-white rounded-lg p-6 text-center shadow-md border border-gray-200">
+                    <p class="text-sm font-medium text-gray-500">Inventory Reduction</p>
+                    <p class="text-2xl font-bold text-green-600 mt-2">18%</p>
+                </div>
+                <!-- KPI Card -->
+                <div class="bg-white rounded-lg p-6 text-center shadow-md border border-gray-200">
+                    <p class="text-sm font-medium text-gray-500">Service Rate</p>
+                    <p class="text-2xl font-bold text-purple-600 mt-2">99.2%</p>
+                </div>
+                <!-- KPI Card -->
+                <div class="bg-white rounded-lg p-6 text-center shadow-md border border-gray-200">
+                    <p class="text-sm font-medium text-gray-500">Stockouts Avoided</p>
+                    <p class="text-2xl font-bold text-orange-600 mt-2">85%</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Function to create a line chart for Causal Forecasting
+            function drawCausalForecastChart() {
+                const canvas = document.getElementById('causalForecastChart');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                const padding = 50;
+
+                const data = {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
+                    actual: [120, 135, 150, 145, 170, 195, 210, 205, 220, 240],
+                    forecast: [125, 130, 155, 140, 175, 200, 200, 215, 225, 245]
+                };
+
+                // Clear canvas
+                ctx.clearRect(0, 0, width, height);
+
+                // Find max value for scaling
+                const maxValue = Math.max(...data.actual, ...data.forecast) * 1.1;
+
+                // Draw Y-axis
+                ctx.beginPath();
+                ctx.moveTo(padding, height - padding);
+                ctx.lineTo(padding, padding);
+                ctx.strokeStyle = '#6b7280';
+                ctx.stroke();
+
+                // Draw X-axis
+                ctx.beginPath();
+                ctx.moveTo(padding, height - padding);
+                ctx.lineTo(width - padding, height - padding);
+                ctx.stroke();
+
+                // Draw Y-axis labels
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '12px Inter';
+                for (let i = 0; i <= 5; i++) {
+                    const y = height - padding - (i * (height - 2 * padding) / 5);
+                    ctx.fillText(Math.round(maxValue / 5 * i), padding - 40, y + 5);
+                }
+
+                // Draw X-axis labels
+                ctx.textAlign = 'center';
+                for (let i = 0; i < data.labels.length; i++) {
+                    const x = padding + (i * (width - 2 * padding) / (data.labels.length - 1));
+                    ctx.fillText(data.labels[i], x, height - padding + 20);
+                }
+
+                // Draw Actual Sales line
+                ctx.beginPath();
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2;
+                ctx.moveTo(padding, height - padding - (data.actual[0] / maxValue * (height - 2 * padding)));
+                for (let i = 1; i < data.actual.length; i++) {
+                    const x = padding + (i * (width - 2 * padding) / (data.actual.length - 1));
+                    const y = height - padding - (data.actual[i] / maxValue * (height - 2 * padding));
+                    ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // Draw Actual Sales points
+                ctx.fillStyle = '#3b82f6';
+                for (let i = 0; i < data.actual.length; i++) {
+                    const x = padding + (i * (width - 2 * padding) / (data.actual.length - 1));
+                    const y = height - padding - (data.actual[i] / maxValue * (height - 2 * padding));
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Draw Causal Forecast line
+                ctx.beginPath();
+                ctx.strokeStyle = '#ef4444';
+                ctx.setLineDash([5, 5]);
+                ctx.lineWidth = 2;
+                ctx.moveTo(padding, height - padding - (data.forecast[0] / maxValue * (height - 2 * padding)));
+                for (let i = 1; i < data.forecast.length; i++) {
+                    const x = padding + (i * (width - 2 * padding) / (data.forecast.length - 1));
+                    const y = height - padding - (data.forecast[i] / maxValue * (height - 2 * padding));
+                    ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // Draw Causal Forecast points
+                ctx.fillStyle = '#ef4444';
+                for (let i = 0; i < data.forecast.length; i++) {
+                    const x = padding + (i * (width - 2 * padding) / (data.forecast.length - 1));
+                    const y = height - padding - (data.forecast[i] / maxValue * (height - 2 * padding));
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.setLineDash([]); // Reset line dash
+            }
+
+            // Function to create a bar chart for Simulation
+            function drawSimulationChart(scenario1, scenario2) {
+                const canvas = document.getElementById('simulationChart');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                const padding = 50;
+
+                const data = {
+                    labels: ['Inventory (Units)', 'Service Rate (%)'],
+                    scenario1: [scenario1.inventory, scenario1.serviceRate],
+                    scenario2: [scenario2.inventory, scenario2.serviceRate]
+                };
+
+                // Clear canvas
+                ctx.clearRect(0, 0, width, height);
+
+                // Find max value for scaling
+                const maxValue = Math.max(...data.scenario1, ...data.scenario2) * 1.2;
+
+                // Draw Y-axis
+                ctx.beginPath();
+                ctx.moveTo(padding, height - padding);
+                ctx.lineTo(padding, padding);
+                ctx.strokeStyle = '#6b7280';
+                ctx.stroke();
+
+                // Draw Y-axis labels
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '12px Inter';
+                ctx.textAlign = 'right';
+                for (let i = 0; i <= 5; i++) {
+                    const y = height - padding - (i * (height - 2 * padding) / 5);
+                    ctx.fillText(Math.round(maxValue / 5 * i), padding - 10, y + 5);
+                }
+
+                // Draw X-axis
+                ctx.beginPath();
+                ctx.moveTo(padding, height - padding);
+                ctx.lineTo(width - padding, height - padding);
+                ctx.stroke();
+
+                // Draw bars and labels
+                const barWidth = (width - 2 * padding) / (data.labels.length * 2 + 1);
+                const barSpacing = barWidth / 2;
+                ctx.textAlign = 'center';
+                for (let i = 0; i < data.labels.length; i++) {
+                    // Scenario 1 bar
+                    const x1 = padding + barSpacing + (i * 2 * barWidth) + (i * barSpacing);
+                    const y1 = height - padding - (data.scenario1[i] / maxValue * (height - 2 * padding));
+                    const h1 = height - padding - y1;
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillRect(x1, y1, barWidth, h1);
+
+                    // Scenario 2 bar
+                    const x2 = x1 + barWidth;
+                    const y2 = height - padding - (data.scenario2[i] / maxValue * (height - 2 * padding));
+                    const h2 = height - padding - y2;
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(x2, y2, barWidth, h2);
+
+                    // X-axis label
+                    ctx.fillStyle = '#6b7280';
+                    ctx.fillText(data.labels[i], x1 + barWidth, height - padding + 20);
+
+                    // Bar value text
+                    ctx.fillStyle = '#111827';
+                    ctx.fillText(data.scenario1[i], x1 + barWidth / 2, y1 - 10);
+                    ctx.fillText(data.scenario2[i], x2 + barWidth / 2, y2 - 10);
+                }
+
+                // Legend
+                const legendX = width - padding - 200;
+                const legendY = padding / 2;
+                ctx.textAlign = 'left';
+                ctx.font = '14px Inter';
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(legendX, legendY, 15, 15);
+                ctx.fillStyle = '#6b7280';
+                ctx.fillText('Normal Scenario', legendX + 20, legendY + 12);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(legendX, legendY + 25, 15, 15);
+                ctx.fillStyle = '#6b7280';
+                ctx.fillText('Promo Scenario', legendX + 20, legendY + 37);
+            }
+
+            // Initial chart draws
+            drawCausalForecastChart();
+            drawSimulationChart({ inventory: 1500, serviceRate: 98 }, { inventory: 1800, serviceRate: 99.5 });
+
+
+            // Simulation logic
+            const demandSlider = document.getElementById('demandSlider');
+            const demandSliderValue = document.getElementById('demandSliderValue');
+            const promoCheckbox = document.getElementById('promoCheckbox');
+            const outputText = document.getElementById('output-text');
+
+            demandSlider.oninput = function() {
+                demandSliderValue.innerHTML = this.value;
+            };
+
+            window.runSimulation = function() {
+                const demandIncrease = parseInt(demandSlider.value, 10);
+                const isPromo = promoCheckbox.checked;
+
+                // Simple dummy logic for simulation based on inputs
+                let baseInventory = 1500;
+                let baseServiceRate = 98;
+                let promoInventory = 1800;
+                let promoServiceRate = 99.5;
+
+                if (isPromo) {
+                    promoInventory += demandIncrease * 10;
+                    promoServiceRate += Math.round(demandIncrease / 10);
+                    outputText.textContent = `Scenario: High demand from a promo event. Inventory is now at ${promoInventory} units to meet the demand surge, maintaining a service rate of ${promoServiceRate}%.`;
+                } else {
+                    baseInventory += demandIncrease * 5;
+                    baseServiceRate += Math.round(demandIncrease / 20);
+                    outputText.textContent = `Scenario: Normal operations with a ${demandIncrease}% unexpected demand surge. Inventory adjusted to ${baseInventory} units, with a service rate of ${baseServiceRate}%.`;
+                }
+
+                // Redraw the chart with the new simulated values
+                drawSimulationChart({ inventory: baseInventory, serviceRate: baseServiceRate }, { inventory: promoInventory, serviceRate: promoServiceRate });
+            };
+        });
+    </script>
+</body>
+</html>

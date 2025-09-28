@@ -11,8 +11,9 @@ import {
   LineChart,
   Line,
 } from 'recharts';
-import { useTheme } from './ThemeContext';
-import { Card, Header } from './SharedComponents';
+import { useTheme } from "../components/ThemeContext";
+
+import { Card, Header } from '../components/SharedComponents';
 import { LayoutWrapper } from './DashboardHome';
 
 const Simulation = ({ onNavigate }) => {

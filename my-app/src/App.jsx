@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { ThemeProvider } from './ThemeContext';
-import DashboardHome from './DashboardHome';
-import Overview from './Overview';
-import CausalAnalysis from './CausalAnalysis';
-import Simulation from './Simulation';
+import { ThemeProvider } from './components/ThemeContext';
+import DashboardHome from './pages/DashboardHome';
+import Overview from './pages/Overview';
+import CausalAnalysis from './pages/CausalAnalysis';
+import Simulation from './pages/Simulation';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState("home");

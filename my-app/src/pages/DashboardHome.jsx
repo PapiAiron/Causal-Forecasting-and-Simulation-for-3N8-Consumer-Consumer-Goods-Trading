@@ -19,8 +19,9 @@ import {
   Palette,
   Search
 } from 'lucide-react';
-import { useTheme } from './ThemeContext';
-import { Card, Header } from './SharedComponents';
+import { useTheme } from "../components/ThemeContext";
+
+import { Card, Header } from '../components/SharedComponents';
 
 // Theme Settings Modal Component
 const ThemeModal = ({ isOpen, onClose }) => {

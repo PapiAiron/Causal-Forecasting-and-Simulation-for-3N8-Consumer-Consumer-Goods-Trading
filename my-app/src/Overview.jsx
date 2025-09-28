@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { useTheme } from './ThemeContext';
 import { Card, Header } from './SharedComponents';
+import { LayoutWrapper } from './DashboardHome';
 
 const Overview = ({ onNavigate }) => {
   const { theme } = useTheme();
@@ -73,12 +74,11 @@ const Overview = ({ onNavigate }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <LayoutWrapper currentPage="overview" onNavigate={onNavigate}>
       <Header
         title="Overview"
         description="Key Performance Indicators & Forecasting"
         icon={BarChart3}
-        onBack={() => onNavigate('home')}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -172,7 +172,7 @@ const Overview = ({ onNavigate }) => {
           </Card>
         </div>
       </main>
-    </div>
+    </LayoutWrapper>
   );
 };
 

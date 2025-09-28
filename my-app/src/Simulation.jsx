@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { useTheme } from './ThemeContext';
 import { Card, Header } from './SharedComponents';
+import { LayoutWrapper } from './DashboardHome';
 
 const Simulation = ({ onNavigate }) => {
   const { theme } = useTheme();
@@ -198,12 +199,11 @@ const Simulation = ({ onNavigate }) => {
   })) || [];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <LayoutWrapper currentPage="simulation" onNavigate={onNavigate}>
       <Header
         title="Simulation"
         description="Scenario Analysis & Risk Assessment"
         icon={Play}
-        onBack={() => onNavigate('home')}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -537,8 +537,7 @@ const Simulation = ({ onNavigate }) => {
           </div>
         </div>
       </main>
-    </div>
+    </LayoutWrapper>
   );
 };
-
 export default Simulation;

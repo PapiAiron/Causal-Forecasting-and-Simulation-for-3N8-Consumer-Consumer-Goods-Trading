@@ -1,4 +1,18 @@
+
+
 npm install react-router-dom recharts lucide-react
  npm install recharts lucide-react
    npm install -D tailwindcss postcss autoprefixer
    npx tailwindcss init -p
+
+
+
+Ruun
+#BACKEND
+cd backend
+venv/Scripts/activate
+python app.py 
+
+#FRONTEND
+cd my-app
+npm run dev

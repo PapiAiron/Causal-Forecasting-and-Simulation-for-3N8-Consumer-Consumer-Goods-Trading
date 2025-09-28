@@ -178,9 +178,6 @@ const TopMenuBar = () => {
 
             {/* Right side - theme toggle, notifications and profile */}
             <div className="flex items-center space-x-4">
-              {/* Theme Toggle */}
-          
-
               {/* Notifications */}
               <button className="relative p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                 <Bell className="w-5 h-5" />
@@ -428,9 +425,7 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
 
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
-    if (tabId !== 'home') {
-      onNavigate(tabId);
-    }
+    onNavigate(tabId);
   };
 
   React.useEffect(() => {

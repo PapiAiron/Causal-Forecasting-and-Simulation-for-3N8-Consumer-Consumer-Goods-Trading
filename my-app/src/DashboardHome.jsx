@@ -12,13 +12,17 @@ import {
   Menu,
   X,
   ChevronDown,
+  ChevronLeft,
   Home,
   Moon,
   Sun,
-  Palette
+  Palette,
+  Search
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { Card, Header } from './SharedComponents';
+
+// Use the actual theme context and components from imports
 
 // Theme Settings Modal Component
 const ThemeModal = ({ isOpen, onClose }) => {
@@ -36,12 +40,12 @@ const ThemeModal = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Theme Settings</h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <X className="w-5 h-5" />
           </button>
@@ -54,7 +58,7 @@ const ThemeModal = ({ isOpen, onClose }) => {
             </label>
             <div className="flex gap-2">
               <button
-                onClick={toggleDarkMode}
+                onClick={!darkMode ? null : toggleDarkMode}
                 className={`flex items-center justify-center p-3 rounded-lg border-2 transition-colors ${
                   !darkMode
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -65,7 +69,7 @@ const ThemeModal = ({ isOpen, onClose }) => {
                 <span className="text-sm">Light</span>
               </button>
               <button
-                onClick={toggleDarkMode}
+                onClick={darkMode ? null : toggleDarkMode}
                 className={`flex items-center justify-center p-3 rounded-lg border-2 transition-colors ${
                   darkMode
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -105,166 +109,279 @@ const ThemeModal = ({ isOpen, onClose }) => {
   );
 };
 
-// Task Bar Component
-const TaskBar = ({ activeTab, onTabChange }) => {
-  const { theme } = useTheme();
+// Modern Sidebar Component
+const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const { theme, darkMode, toggleDarkMode } = useTheme();
   
-  const tabs = [
-    { id: 'home', label: 'Home/Dashboard', icon: Home },
+  const navigationItems = [
+    { id: 'home', label: 'Dashboard', icon: Home },
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp },
     { id: 'simulation', label: 'Simulation', icon: Play }
   ];
 
-  return (
-    <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex space-x-1 overflow-x-auto">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
-                className={`flex items-center space-x-2 px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                  isActive
-                    ? `border-current text-current`
-                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300'
-                }`}
-                style={isActive ? { 
-                  borderColor: theme.chart, 
-                  color: theme.chart 
-                } : {}}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Top Menu Bar Component
-const TopMenuBar = () => {
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
-  const [notifications] = useState(3);
-  const { theme, darkMode, toggleDarkMode } = useTheme();
-
-  const profileMenuItems = [
-    { icon: User, label: 'Your Profile', href: '#' },
-    { icon: Settings, label: 'Settings', href: '#' },
-    { icon: HelpCircle, label: 'Help Center', href: '#' },
-    { icon: Mail, label: 'Contact Us', href: '#' },
-    { icon: LogOut, label: 'Sign Out', href: '#', separator: true }
+  const bottomItems = [
+    { id: 'settings', label: 'Settings', icon: Settings, action: () => setIsThemeModalOpen(true) },
+    { id: 'help', label: 'Help Center', icon: HelpCircle },
+    { id: 'theme', label: darkMode ? 'Light Mode' : 'Dark Mode', icon: darkMode ? Sun : Moon, action: toggleDarkMode }
   ];
 
   return (
     <>
-      <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center space-x-2">
-              <BarChart3 className="w-8 h-8" style={{ color: theme.chart }} />
-              <span className="text-xl font-bold text-gray-900 dark:text-white">3N8</span>
-            </div>
-
-            {/* Right side - theme toggle, notifications and profile */}
-            <div className="flex items-center space-x-4">
-              {/* Notifications */}
-              <button className="relative p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                <Bell className="w-5 h-5" />
-                {notifications > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {notifications}
-                  </span>
-                )}
-              </button>
-
-              {/* Profile dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  className="flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2"
-                  style={{ '--tw-ring-color': theme.chart }}
-                >
-                  <div 
-                    className="w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{ backgroundColor: theme.chart }}
-                  >
-                    <User className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="hidden md:block text-gray-700 dark:text-gray-300 font-medium">John Doe</span>
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
-                </button>
-
-                {/* Profile dropdown menu */}
-                {isProfileOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
-                    <div className="py-1">
-                      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">John Doe</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">john.doe@company.com</p>
-                      </div>
-                      {profileMenuItems.map((item) => (
-                        <div key={item.label}>
-                          {item.separator && <div className="border-t border-gray-200 dark:border-gray-700" />}
-                          {item.action ? (
-                            <button
-                              onClick={() => {
-                                item.action();
-                                setIsProfileOpen(false);
-                              }}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors w-full text-left"
-                            >
-                              <item.icon className="w-4 h-4" />
-                              <span>{item.label}</span>
-                            </button>
-                          ) : (
-                            <a
-                              href={item.href}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors"
-                            >
-                              <item.icon className="w-4 h-4" />
-                              <span>{item.label}</span>
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={onToggle}
+        />
+      )}
+      
+      {/* Sidebar */}
+      <div className={`fixed left-0 top-0 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 z-50 transition-all duration-300 ${
+        isOpen ? 'w-72' : 'w-20'
+      }`}>
+        
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          {isOpen ? (
+            <>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: theme.chart }}>
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <span className="text-xl font-bold text-gray-900 dark:text-white">3N8</span>
               </div>
-
-              {/* Mobile menu button */}
               <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="md:hidden p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                onClick={onToggle}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
               >
-                {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </>
+          ) : (
+            <div className="flex flex-col items-center space-y-2 w-full">
+              <div className="p-2 rounded-lg" style={{ backgroundColor: theme.chart }}>
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+              <button
+                onClick={onToggle}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
+              >
+                <Menu className="w-4 h-4" />
               </button>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Click outside to close profile dropdown */}
-        {isProfileOpen && (
+        {/* Search Bar (only when open) */}
+        {isOpen && (
+          <div className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search..."
+                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:border-transparent"
+                style={{ '--tw-ring-color': theme.chart }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <div className="flex-1 px-4 py-2">
+          <nav className="space-y-2">
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onTabChange(item.id)}
+                  className={`w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-left transition-all duration-200 group ${
+                    isActive
+                      ? 'text-white shadow-lg transform scale-[0.98]'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  style={isActive ? { 
+                    backgroundColor: theme.chart,
+                    boxShadow: `0 8px 20px ${theme.chart}40`
+                  } : {}}
+                >
+                  <Icon className={`w-5 h-5 ${isActive ? 'text-white' : ''} ${!isOpen ? 'mx-auto' : ''}`} />
+                  {isOpen && (
+                    <span className="font-medium">{item.label}</span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Bottom items for collapsed mode */}
+        {!isOpen && (
+          <div className="p-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
+            <button
+              onClick={() => setIsThemeModalOpen(true)}
+              className="w-full p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors"
+            >
+              <Settings className="w-5 h-5 mx-auto" />
+            </button>
+            <button
+              onClick={toggleDarkMode}
+              className="w-full p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors"
+            >
+              {darkMode ? <Sun className="w-5 h-5 mx-auto" /> : <Moon className="w-5 h-5 mx-auto" />}
+            </button>
+          </div>
+        )}
+
+        {/* Bottom items for expanded mode */}
+        {isOpen && (
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="space-y-2">
+              {bottomItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    if (item.action) {
+                      item.action();
+                    }
+                  }}
+                  className="flex items-center space-x-3 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors w-full text-left rounded-lg"
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <ThemeModal isOpen={isThemeModalOpen} onClose={() => setIsThemeModalOpen(false)} />
+    </>
+  );
+};
+
+// Profile Component (moved from sidebar to topbar)
+const ProfileDropdown = () => {
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const { theme } = useTheme();
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsProfileOpen(!isProfileOpen)}
+        className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+      >
+        <div 
+          className="w-8 h-8 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: theme.chart }}
+        >
+          <User className="w-4 h-4 text-white" />
+        </div>
+        <div className="hidden sm:block text-left">
+          <p className="text-sm font-medium text-gray-900 dark:text-white">John Doe</p>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Profile dropdown */}
+      {isProfileOpen && (
+        <>
+          {/* Click outside overlay */}
           <div
             className="fixed inset-0 z-40"
             onClick={() => setIsProfileOpen(false)}
           />
-        )}
-      </nav>
+          
+          <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+            {/* Profile info */}
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center space-x-3">
+                <div 
+                  className="w-10 h-10 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: theme.chart }}
+                >
+                  <User className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">John Doe</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">john.doe@company.com</p>
+                </div>
+              </div>
+            </div>
 
-      <ThemeModal isOpen={isThemeModalOpen} onClose={() => setIsThemeModalOpen(false)} />
-    </>
+            {/* Profile menu items */}
+            <div className="py-2">
+              <button className="flex items-center space-x-3 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors w-full text-left">
+                <User className="w-4 h-4" />
+                <span>View Profile</span>
+              </button>
+              <button className="flex items-center space-x-3 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors w-full text-left">
+                <Settings className="w-4 h-4" />
+                <span>Account Settings</span>
+              </button>
+              <button className="flex items-center space-x-3 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors w-full text-left">
+                <HelpCircle className="w-4 h-4" />
+                <span>Help & Support</span>
+              </button>
+            </div>
+
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-2">
+              <button className="flex items-center space-x-3 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors w-full text-left">
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// Top Bar Component with Profile moved here
+const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
+  const [notifications] = useState(3);
+  const { theme } = useTheme();
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+      <div className="flex items-center justify-between">
+        {/* Left side - Hamburger menu for mobile/collapsed sidebar */}
+        <div className="flex items-center space-x-4">
+          {!sidebarOpen && (
+            <button
+              onClick={onSidebarToggle}
+              className="lg:hidden p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        {/* Right side - notifications and profile */}
+        <div className="flex items-center space-x-4">
+          <button className="relative p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+            <Bell className="w-5 h-5" />
+            {notifications > 0 && (
+              <span 
+                className="absolute -top-1 -right-1 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium"
+                style={{ backgroundColor: theme.chart }}
+              >
+                {notifications}
+              </span>
+            )}
+          </button>
+          
+          <ProfileDropdown />
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -304,7 +421,7 @@ const DashboardContent = ({ onNavigate }) => {
   ];
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <main className="px-6 py-6">
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Welcome back!</h2>
         <p className="text-gray-600 dark:text-gray-400">Here's what's happening with your forecasting system today.</p>
@@ -312,7 +429,7 @@ const DashboardContent = ({ onNavigate }) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {quickStats.map((stat, index) => (
-          <Card key={index} className="p-6">
+          <Card key={index} className="p-6 hover:shadow-lg transition-all duration-200">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{stat.label}</p>
@@ -339,11 +456,14 @@ const DashboardContent = ({ onNavigate }) => {
               onClick={() => onNavigate(card.id)}
               className="text-left group"
             >
-              <Card className="p-6 hover:shadow-lg transition-all duration-200">
+              <Card className="p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
                 <div className="flex items-center justify-between mb-4">
                   <div 
-                    className="p-3 rounded-lg group-hover:scale-105 transition-transform"
-                    style={{ backgroundColor: theme.chart }}
+                    className="p-3 rounded-xl group-hover:scale-110 transition-all duration-300 shadow-lg"
+                    style={{ 
+                      backgroundColor: theme.chart,
+                      boxShadow: `0 8px 20px ${theme.chart}30`
+                    }}
                   >
                     <IconComponent className="w-6 h-6 text-white" />
                   </div>
@@ -377,7 +497,7 @@ const DashboardContent = ({ onNavigate }) => {
                     {card.id === 'causal-analysis' && `${card.stats.factors} factors analyzed`}
                   </span>
                   <span 
-                    className="font-medium group-hover:translate-x-1 transition-transform"
+                    className="font-medium group-hover:translate-x-2 transition-transform duration-300"
                     style={{ color: theme.chart }}
                   >
                     View Details →
@@ -397,9 +517,9 @@ const DashboardContent = ({ onNavigate }) => {
             { icon: Play, title: 'Simulation completed', desc: 'Seasonal Peak scenario', time: '4 hours ago' },
             { icon: TrendingUp, title: 'New causal factor identified', desc: 'Marketing spend correlation', time: '1 day ago' }
           ].map((activity, index) => (
-            <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <div key={index} className="flex items-center space-x-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
               <div 
-                className="p-2 rounded-full"
+                className="p-2 rounded-xl shadow-sm"
                 style={{ 
                   backgroundColor: theme.secondary || (theme.chart + '20'), 
                   color: theme.chart 
@@ -422,6 +542,7 @@ const DashboardContent = ({ onNavigate }) => {
 // Layout Wrapper Component
 const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
   const [activeTab, setActiveTab] = useState(currentPage || 'home');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
@@ -434,22 +555,28 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      <TopMenuBar />
-      <TaskBar activeTab={activeTab} onTabChange={handleTabChange} />
-      {children}
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        activeTab={activeTab} 
+        onTabChange={handleTabChange} 
+      />
+      
+      <div className={`transition-all duration-300 ${sidebarOpen ? 'lg:ml-72' : 'lg:ml-20'}`}>
+        <TopBar 
+          sidebarOpen={sidebarOpen} 
+          onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
+        />
+        {children}
+      </div>
     </div>
   );
 };
 
 // Main Dashboard Component
-const DashboardHome = ({ onNavigate }) => {
+const DashboardHome = ({ onNavigate = () => {} }) => {
   return (
     <LayoutWrapper currentPage="home" onNavigate={onNavigate}>
-      <Header
-        title="Dashboard"
-        description="Sales Forecasting & Simulation Platform"
-        icon={BarChart3}
-      />
       <DashboardContent onNavigate={onNavigate} />
     </LayoutWrapper>
   );

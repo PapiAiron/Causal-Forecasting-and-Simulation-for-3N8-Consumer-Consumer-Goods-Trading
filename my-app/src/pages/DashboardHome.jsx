@@ -5,14 +5,12 @@ import {
   Play, 
   User, 
   LogOut, 
-  Mail, 
   Settings, 
   Bell, 
   HelpCircle,
   Menu,
   X,
   ChevronDown,
-  ChevronLeft,
   Home,
   Moon,
   Sun,
@@ -20,93 +18,7 @@ import {
   Search
 } from 'lucide-react';
 import { useTheme } from "../components/ThemeContext";
-
 import { Card, Header } from '../components/SharedComponents';
-
-// Theme Settings Modal Component
-const ThemeModal = ({ isOpen, onClose }) => {
-  const { theme, darkMode, colorTheme, toggleDarkMode, setColorTheme } = useTheme();
-
-  if (!isOpen) return null;
-
-  const colorThemes = [
-    { key: 'blue', name: 'Ocean Blue', color: 'bg-blue-500' },
-    { key: 'purple', name: 'Royal Purple', color: 'bg-purple-500' },
-    { key: 'emerald', name: 'Emerald Green', color: 'bg-emerald-500' },
-    { key: 'orange', name: 'Sunset Orange', color: 'bg-orange-500' },
-    { key: 'rose', name: 'Rose Pink', color: 'bg-rose-500' }
-  ];
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Theme Settings</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="p-6 space-y-6">
-          <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 block">
-              Appearance Mode
-            </label>
-            <div className="flex gap-2">
-              <button
-                onClick={!darkMode ? null : toggleDarkMode}
-                className={`flex items-center justify-center p-3 rounded-lg border-2 transition-colors ${
-                  !darkMode
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-              >
-                <Sun className="w-5 h-5 mr-2" />
-                <span className="text-sm">Light</span>
-              </button>
-              <button
-                onClick={darkMode ? null : toggleDarkMode}
-                className={`flex items-center justify-center p-3 rounded-lg border-2 transition-colors ${
-                  darkMode
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-              >
-                <Moon className="w-5 h-5 mr-2" />
-                <span className="text-sm">Dark</span>
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 block">
-              Color Theme
-            </label>
-            <div className="grid grid-cols-1 gap-2">
-              {colorThemes.map((themeOption) => (
-                <button
-                  key={themeOption.key}
-                  onClick={() => setColorTheme(themeOption.key)}
-                  className={`flex items-center p-3 rounded-lg border-2 transition-colors ${
-                    colorTheme === themeOption.key
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                >
-                  <div className={`w-4 h-4 rounded-full ${themeOption.color} mr-3`} />
-                  <span className="text-sm">{themeOption.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Modern Sidebar Component - Completely Hidden by Default
 const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
@@ -137,18 +49,14 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200/30 dark:border-gray-700/30">
           <div className="flex items-center space-x-3">
-            <div 
-              className="p-3 rounded-2xl shadow-lg"
-              style={{ 
-                backgroundColor: theme.chart,
-                boxShadow: `0 8px 25px ${theme.chart}40`
-              }}
-            >
-              <BarChart3 className="w-7 h-7 text-white" />
-            </div>
+            <img 
+              src="3N8.png" 
+              alt="3N8 Logo" 
+              className="w-12 h-12 object-contain rounded-2xl shadow-lg"
+            />
             <div>
               <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                3N8
+                3N8 Analytics Platform
               </span>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Analytics Platform</p>
             </div>
@@ -230,7 +138,28 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
 // Modern Profile Component
 const ProfileDropdown = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const { theme } = useTheme();
+  const { theme, darkMode, colorTheme, toggleDarkMode, setColorTheme } = useTheme();
+
+  const handleDarkModeToggle = () => {
+    toggleDarkMode();
+  };
+
+  const handleColorThemeChange = (themeKey) => {
+    setColorTheme(themeKey);
+  };
+
+  const colorThemes = [
+    { key: 'blue', name: 'Ocean Blue', hex: '#3B82F6' },
+    { key: 'purple', name: 'Royal Purple', hex: '#A855F7' },
+    { key: 'emerald', name: 'Emerald Green', hex: '#10B981' },
+    { key: 'orange', name: 'Sunset Orange', hex: '#F97316' },
+    { key: 'rose', name: 'Rose Pink', hex: '#F43F5E' },
+    { key: 'indigo', name: 'Deep Indigo', hex: '#6366F1' },
+    { key: 'cyan', name: 'Bright Cyan', hex: '#06B6D4' },
+    { key: 'amber', name: 'Golden Amber', hex: '#F59E0B' },
+    { key: 'teal', name: 'Ocean Teal', hex: '#14B8A6' },
+    { key: 'pink', name: 'Hot Pink', hex: '#EC4899' }
+  ];
 
   return (
     <div className="relative">
@@ -263,45 +192,50 @@ const ProfileDropdown = () => {
             onClick={() => setIsProfileOpen(false)}
           />
           
-          <div className="absolute right-0 top-full mt-3 w-72 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 py-3 z-50 animate-in slide-in-from-top-2 duration-200">
+          <div className="absolute right-0 top-full mt-3 w-80 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 z-50 overflow-hidden">
             {/* Profile info */}
-            <div className="px-6 py-4 border-b border-gray-200/30 dark:border-gray-700/30">
+            <div className="px-6 py-5 border-b border-gray-200/30 dark:border-gray-700/30">
               <div className="flex items-center space-x-4">
                 <div 
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg"
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
                   style={{ 
                     backgroundColor: theme.chart,
                     boxShadow: `0 8px 25px ${theme.chart}30`
                   }}
                 >
-                  <User className="w-6 h-6 text-white" />
+                  <User className="w-7 h-7 text-white" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="text-base font-semibold text-gray-900 dark:text-white">John Doe</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">john.doe@company.com</p>
-                  <p className="text-xs font-medium px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full mt-1 inline-block">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">john.doe@company.com</p>
+                  <span className="inline-block text-xs font-medium px-2.5 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full mt-2">
                     Administrator
-                  </p>
+                  </span>
                 </div>
               </div>
             </div>
 
+            
+
             {/* Profile menu items */}
             <div className="py-2">
               {[
-                { icon: User, label: 'View Profile', color: 'text-gray-600 dark:text-gray-300' },
-                { icon: Settings, label: 'Account Settings', color: 'text-gray-600 dark:text-gray-300' },
-                { icon: HelpCircle, label: 'Help & Support', color: 'text-gray-600 dark:text-gray-300' }
+                { icon: User, label: 'View Profile' },
+                { icon: Settings, label: 'Account Settings' },
+                { icon: HelpCircle, label: 'Help & Support' }
               ].map((item, index) => (
-                <button key={index} className="flex items-center space-x-3 px-6 py-3 text-sm hover:bg-gray-100/70 dark:hover:bg-gray-700/70 transition-colors w-full text-left group">
-                  <item.icon className={`w-4 h-4 ${item.color} group-hover:scale-110 transition-transform`} />
-                  <span className={item.color}>{item.label}</span>
+                <button 
+                  key={index} 
+                  className="flex items-center space-x-3 px-6 py-3 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100/70 dark:hover:bg-gray-700/70 transition-all duration-200 w-full text-left group hover:text-gray-900 dark:hover:text-white"
+                >
+                  <item.icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  <span className="font-medium">{item.label}</span>
                 </button>
               ))}
             </div>
 
-            <div className="border-t border-gray-200/30 dark:border-gray-700/30 pt-2">
-              <button className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors w-full text-left group">
+            <div className="border-t border-gray-200/30 dark:border-gray-700/30">
+              <button className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 w-full text-left group">
                 <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-medium">Sign Out</span>
               </button>
@@ -319,7 +253,7 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
   const { theme } = useTheme();
 
   return (
-    <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 sticky top-0 z-30">
+    <header className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 z-30">
       <div className="max-w-full mx-auto px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between relative">
           {/* Left side - Hamburger */}
@@ -332,42 +266,24 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
             </button>
           </div>
 
-          {/* Center - App Title (hidden on small screens, shown on medium+) */}
-          <div className="absolute left-1/2 transform -translate-x-1/2 hidden md:flex items-center space-x-8">
-            <div 
-              className="p-5 rounded-3xl shadow-2xl flex items-center justify-center"
-              style={{ 
-                backgroundColor: theme.chart,
-                boxShadow: `0 12px 35px ${theme.chart}40`
-              }}
-            >
-              <BarChart3 className="w-14 h-14 text-white" />
+          {/* Center - App Title */}
+          <div className="flex items-center space-x-3">
+            <img 
+              src="3N8.png" 
+              alt="3N8 Logo" 
+              className="w-12 h-12 object-contain rounded-2xl shadow-lg"
+            />
+            <div>
+              <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+                3N8 Analytics Platform
+              </span>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Analytics Platform</p>
             </div>
-            <h1 className="text-5xl lg:text-5xl xl:text-9xl 2xl:text-[10rem] font-extrabold tracking-tight bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent whitespace-nowrap">
-              3N8 Analytics Platform
-            </h1>
           </div>
-
-          {/* Mobile App Title (only on small screens) */}
-          <div className="flex md:hidden items-center space-x-3 absolute left-1/2 transform -translate-x-1/2">
-            <div 
-              className="p-3 rounded-2xl shadow-xl flex items-center justify-center"
-              style={{ 
-                backgroundColor: theme.chart,
-                boxShadow: `0 10px 30px ${theme.chart}40`
-              }}
-            >
-              <BarChart3 className="w-6 h-6 text-white" />
-            </div>
-            <h1 className="text-lg sm:text-xl font-extrabold tracking-wide bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-              3N8 
-            </h1>
-          </div>
-
 
           {/* Right side - Notifications + Profile */}
           <div className="flex items-center space-x-2 sm:space-x-4">
-            {/* Notifications - hidden on very small screens */}
+            {/* Notifications */}
             <button className="relative p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 rounded-xl sm:rounded-2xl hover:bg-gray-100/70 dark:hover:bg-gray-800/70 hover:scale-105 active:scale-95 hidden xs:block">
               <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
               {notifications > 0 && (
@@ -424,7 +340,7 @@ const DashboardContent = ({ onNavigate }) => {
   ];
 
   return (
-    <>
+    <div className="pt-24">
       <Header
         title="Dashboard"
         description="Welcome back! Here's what's happening with your forecasting system today."
@@ -499,7 +415,7 @@ const DashboardContent = ({ onNavigate }) => {
                     <span className="text-gray-500 dark:text-gray-400">
                       {card.id === 'overview' && `Delivery: ${card.stats.delivery}`}
                       {card.id === 'simulation' && `${card.stats.scenarios} scenarios available`}
-                      {card.id === 'causal-analysis' && `${card.stats.factors} factors analyzed`}
+                      {card.id === 'causal-analysis' && `${card.stats.factors} analyzed`}
                     </span>
                     <span 
                       className="font-medium group-hover:translate-x-2 transition-transform duration-300"
@@ -541,11 +457,11 @@ const DashboardContent = ({ onNavigate }) => {
           </div>
         </Card>
       </main>
-    </>
+    </div>
   );
 };
 
-// Modern Layout Wrapper Component - Full Width Design
+// Modern Layout Wrapper Component
 const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
   const [activeTab, setActiveTab] = useState(currentPage || 'home');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -553,7 +469,6 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
     onNavigate(tabId);
-    // Auto-close sidebar after navigation for better UX
     setSidebarOpen(false);
   };
 
@@ -567,8 +482,8 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
       style={{
         transform: 'scale(0.9)',
         transformOrigin: 'top left',
-        width: '111.11%', // 100% / 0.9 to maintain full viewport coverage
-        height: '111.11%' // 100% / 0.9 to maintain full viewport coverage
+        width: '111.11%',
+        height: '111.11%'
       }}
     >
       <Sidebar 
@@ -578,7 +493,6 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
         onTabChange={handleTabChange} 
       />
       
-      {/* Full width main content - no margins */}
       <div className="w-full">
         <TopBar 
           sidebarOpen={sidebarOpen} 

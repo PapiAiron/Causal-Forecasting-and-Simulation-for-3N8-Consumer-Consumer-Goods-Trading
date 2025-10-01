@@ -201,6 +201,7 @@ const Simulation = ({ onNavigate }) => {
 
   return (
     <LayoutWrapper currentPage="simulation" onNavigate={onNavigate}>
+      <div className="pt-24">
       <Header
         title="Simulation"
         description="Scenario Analysis & Risk Assessment"
@@ -538,7 +539,9 @@ const Simulation = ({ onNavigate }) => {
           </div>
         </div>
       </main>
+      </div>
     </LayoutWrapper>
+
   );
 };
 export default Simulation;

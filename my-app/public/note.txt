@@ -1,5 +1,10 @@
+#update requirements.txt
+pip install -r requirements
+python -m pip freeze > requirements.txt
 
 
+#react requirements
+npm install
 npm install react-router-dom recharts lucide-react
  npm install recharts lucide-react
    npm install -D tailwindcss postcss autoprefixer
@@ -10,7 +15,7 @@ npm install react-router-dom recharts lucide-react
 Ruun
 #BACKEND
 cd backend
-venv/Scripts/activate
+venv/Scripts/activate # or source venv/Scripts/activate
 python app.py 
 
 #FRONTEND

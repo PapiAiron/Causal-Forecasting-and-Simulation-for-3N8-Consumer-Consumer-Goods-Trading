@@ -130,6 +130,7 @@ const CausalAnalysis = ({ onNavigate }) => {
 
   return (
     <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
+      <div className="pt-24">
       <Header
         title="Causal Analysis"
         description="Factor Impact & Correlation Analysis"
@@ -354,6 +355,7 @@ const CausalAnalysis = ({ onNavigate }) => {
           )}
         </div>
       </main>
+      </div>
     </LayoutWrapper>
   );
 };

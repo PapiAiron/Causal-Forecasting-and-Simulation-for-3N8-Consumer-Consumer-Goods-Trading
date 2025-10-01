@@ -76,103 +76,105 @@ const Overview = ({ onNavigate }) => {
 
   return (
     <LayoutWrapper currentPage="overview" onNavigate={onNavigate}>
-      <Header
-        title="Overview"
-        description="Key Performance Indicators & Forecasting"
-        icon={BarChart3}
-      />
+      <div className="pt-24">
+        <Header
+          title="Overview"
+          description="Key Performance Indicators & Forecasting"
+          icon={BarChart3}
+        />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {kpiData.map((kpi, index) => (
-              <KPICard key={index} {...kpi} />
-            ))}
-          </div>
-
-          <Card className="p-6">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Demand Forecasting Comparison</h2>
-              <div className="flex flex-wrap space-x-4">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Actual</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full`} style={{ backgroundColor: theme.chart }}></div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Traditional</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Prophet</span>
-                </div>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={demandForecastData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="month" stroke="#666" />
-                <YAxis stroke="#666" />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="actual" 
-                  name="Actual" 
-                  stroke="#9ca3af" 
-                  strokeWidth={2}
-                  dot={{ fill: '#9ca3af', strokeWidth: 2 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="predicted" 
-                  name="Traditional" 
-                  stroke={theme.chart} 
-                  strokeWidth={2}
-                  dot={{ fill: theme.chart, strokeWidth: 2 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="causal" 
-                  name="Prophet" 
-                  stroke="#10b981" 
-                  strokeWidth={2}
-                  dot={{ fill: '#10b981', strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </Card>
-
-          <Card className="p-6">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-6">Current Inventory Status</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {inventoryData.map((item, index) => (
-                <div key={index} className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
-                  <h3 className="font-medium text-gray-800 dark:text-white mb-2">{item.product}</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">Current:</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{item.current.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">Optimal:</span>
-                      <span className="text-gray-900 dark:text-white">{item.optimal.toLocaleString()}</span>
-                    </div>
-                    <div className={`mt-2 text-xs font-bold px-2 py-1 rounded-full text-center ${getStatusColor(item.status)}`}>
-                      {item.status.toUpperCase()}
-                    </div>
-                  </div>
-                </div>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {kpiData.map((kpi, index) => (
+                <KPICard key={index} {...kpi} />
               ))}
             </div>
-          </Card>
-        </div>
-      </main>
+
+            <Card className="p-6">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Demand Forecasting Comparison</h2>
+                <div className="flex flex-wrap space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Actual</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full`} style={{ backgroundColor: theme.chart }}></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Traditional</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Prophet</span>
+                  </div>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={demandForecastData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="month" stroke="#666" />
+                  <YAxis stroke="#666" />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '6px'
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="actual" 
+                    name="Actual" 
+                    stroke="#9ca3af" 
+                    strokeWidth={2}
+                    dot={{ fill: '#9ca3af', strokeWidth: 2 }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="predicted" 
+                    name="Traditional" 
+                    stroke={theme.chart} 
+                    strokeWidth={2}
+                    dot={{ fill: theme.chart, strokeWidth: 2 }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="causal" 
+                    name="Prophet" 
+                    stroke="#10b981" 
+                    strokeWidth={2}
+                    dot={{ fill: '#10b981', strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-6">Current Inventory Status</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {inventoryData.map((item, index) => (
+                  <div key={index} className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
+                    <h3 className="font-medium text-gray-800 dark:text-white mb-2">{item.product}</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Current:</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{item.current.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Optimal:</span>
+                        <span className="text-gray-900 dark:text-white">{item.optimal.toLocaleString()}</span>
+                      </div>
+                      <div className={`mt-2 text-xs font-bold px-2 py-1 rounded-full text-center ${getStatusColor(item.status)}`}>
+                        {item.status.toUpperCase()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </main>
+      </div>
     </LayoutWrapper>
   );
 };

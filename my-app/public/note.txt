@@ -11,7 +11,7 @@ npm install react-router-dom recharts lucide-react
    npx tailwindcss init -p
 
 
-
+#f
 Ruun
 #BACKEND
 cd backend

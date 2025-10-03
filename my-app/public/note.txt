@@ -14,6 +14,7 @@ npm install react-router-dom recharts lucide-react
  
  #ascending
  
+#fd
 Ruun
 #BACKEND
 cd backend

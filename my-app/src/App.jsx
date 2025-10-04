@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
-import { ThemeProvider } from './components/ThemeContext';
-import DashboardHome from './pages/DashboardHome';
-import Overview from './pages/Overview';
-import CausalAnalysis from './pages/CausalAnalysis';
-import Simulation from './pages/Simulation';
+import React, { useState } from "react";
+import { ThemeProvider } from "./components/ThemeContext";
+import DashboardHome from "./pages/DashboardHome";
+import Overview from "./pages/Overview";
+import CausalAnalysis from "./pages/CausalAnalysis";
+import Simulation from "./pages/Simulation";
+import Profile from "./pages/Profile";
+import Support from "./pages/SupportPage";
+import AboutUs from "./pages/AboutUs";
+// Optional: Settings page placeholder
+// import Settings from "./pages/Settings";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState("home");
@@ -19,6 +24,9 @@ const App = () => {
         {currentPage === "overview" && <Overview onNavigate={handleNavigation} />}
         {currentPage === "causal-analysis" && <CausalAnalysis onNavigate={handleNavigation} />}
         {currentPage === "simulation" && <Simulation onNavigate={handleNavigation} />}
+        {currentPage === "profile" && <Profile onNavigate={handleNavigation} />}
+        {currentPage === "support" && <Support onNavigate={handleNavigation} />}
+        {currentPage === "about" && <AboutUs onNavigate={handleNavigation} />}
       </div>
     </ThemeProvider>
   );

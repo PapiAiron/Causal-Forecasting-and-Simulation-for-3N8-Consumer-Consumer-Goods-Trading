@@ -9,9 +9,10 @@ import Support from "./pages/SupportPage";
 import AboutUs from "./pages/AboutUs";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
+import AccountSettings from "./pages/AccountSettings";
 
 const App = () => {
-  const [currentPage, setCurrentPage] = useState("login"); // Changed from "home" to "login"
+  const [currentPage, setCurrentPage] = useState("login");
 
   const handleNavigation = (page) => {
     setCurrentPage(page);
@@ -29,6 +30,7 @@ const App = () => {
         {currentPage === "about" && <AboutUs onNavigate={handleNavigation} />}
         {currentPage === "login" && <Login onNavigate={handleNavigation} />}
         {currentPage === "signup" && <SignUp onNavigate={handleNavigation} />}
+        {currentPage === "accountsettings" && <AccountSettings onNavigate={handleNavigation} />}
       </div>
     </ThemeProvider>
   );

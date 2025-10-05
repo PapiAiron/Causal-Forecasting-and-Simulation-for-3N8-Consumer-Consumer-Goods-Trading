@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 
 const ThemeContext = createContext();
 
@@ -78,8 +78,23 @@ const themes = {
 };
 
 export const ThemeProvider = ({ children }) => {
-  const [currentTheme, setCurrentTheme] = useState('blue');
-  const [darkMode, setDarkMode] = useState(false);
+  // Load saved settings (or default if none)
+  const [currentTheme, setCurrentTheme] = useState(() => {
+    return localStorage.getItem("theme") || "blue";
+  });
+
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem("darkMode") === "true"; // stored as string
+  });
+
+  // Whenever theme changes → save it
+  useEffect(() => {
+    localStorage.setItem("theme", currentTheme);
+  }, [currentTheme]);
+
+  useEffect(() => {
+    localStorage.setItem("darkMode", darkMode);
+  }, [darkMode]);
 
   return (
     <ThemeContext.Provider value={{
@@ -104,3 +119,4 @@ export const useTheme = () => {
   }
   return context;
 };
+  

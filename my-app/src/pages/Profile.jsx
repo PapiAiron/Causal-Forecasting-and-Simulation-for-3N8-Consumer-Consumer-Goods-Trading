@@ -1,19 +1,21 @@
 // src/pages/Profile.jsx
 import React from "react";
+import { LayoutWrapper } from './DashboardHome';  
 import { Card, Header } from "../components/SharedComponents";
 import { User } from "lucide-react";
 
 const Profile = ({ onNavigate }) => {
   return (
     <LayoutWrapper currentPage="profile" onNavigate={onNavigate}>
-      <div className="pt-24 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="pt-24">
         <Header
           title="Your Profile"
           description="Manage your account information and settings."
           icon={User}
         />
 
-        <Card className="p-6 mt-6">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"> 
+          <Card className="p-6 mt-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Account Information
           </h3>
@@ -23,9 +25,14 @@ const Profile = ({ onNavigate }) => {
             <p><strong>Role:</strong> System Administrator</p>
           </div>
         </Card>
+        </main>
       </div>
+      
     </LayoutWrapper>
+    
   );
+
+  
 };
 
 export default Profile;

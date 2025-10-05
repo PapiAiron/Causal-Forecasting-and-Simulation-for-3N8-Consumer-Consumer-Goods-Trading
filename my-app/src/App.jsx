@@ -7,11 +7,11 @@ import Simulation from "./pages/Simulation";
 import Profile from "./pages/Profile";
 import Support from "./pages/SupportPage";
 import AboutUs from "./pages/AboutUs";
-// Optional: Settings page placeholder
-// import Settings from "./pages/Settings";
+import Login from "./pages/Login";
+import SignUp from "./pages/SignUp";
 
 const App = () => {
-  const [currentPage, setCurrentPage] = useState("home");
+  const [currentPage, setCurrentPage] = useState("login"); // Changed from "home" to "login"
 
   const handleNavigation = (page) => {
     setCurrentPage(page);
@@ -27,6 +27,8 @@ const App = () => {
         {currentPage === "profile" && <Profile onNavigate={handleNavigation} />}
         {currentPage === "support" && <Support onNavigate={handleNavigation} />}
         {currentPage === "about" && <AboutUs onNavigate={handleNavigation} />}
+        {currentPage === "login" && <Login onNavigate={handleNavigation} />}
+        {currentPage === "signup" && <SignUp onNavigate={handleNavigation} />}
       </div>
     </ThemeProvider>
   );

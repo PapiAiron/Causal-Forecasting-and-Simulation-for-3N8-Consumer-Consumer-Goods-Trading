@@ -15,7 +15,9 @@ import {
   Moon,
   Sun,
   Palette,
-  Search
+  Search,
+  Info,
+  UserPlus
 } from 'lucide-react';
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
@@ -56,7 +58,7 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
             />
             <div>
               <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                3N8 Analytics Platform
+                3N8 Analytics
               </span>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Analytics Platform</p>
             </div>
@@ -136,7 +138,7 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
 };
 
 // Modern Profile Component
-const ProfileDropdown = () => {
+const ProfileDropdown = ({ onNavigate }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const { theme, darkMode, colorTheme, toggleDarkMode, setColorTheme } = useTheme();
 
@@ -146,6 +148,13 @@ const ProfileDropdown = () => {
 
   const handleColorThemeChange = (themeKey) => {
     setColorTheme(themeKey);
+  };
+
+  const handleNavigation = (page) => {
+    if (onNavigate) {
+      onNavigate(page);
+    }
+    setIsProfileOpen(false);
   };
 
   const colorThemes = [
@@ -215,17 +224,17 @@ const ProfileDropdown = () => {
               </div>
             </div>
 
-            
-
             {/* Profile menu items */}
             <div className="py-2">
               {[
-                { icon: User, label: 'View Profile' },
-                { icon: Settings, label: 'Account Settings' },
-                { icon: HelpCircle, label: 'Help & Support' }
+                { icon: User, label: 'View Profile', action: 'profile' },
+                { icon: Settings, label: 'Account Settings', action: 'profile' },
+                { icon: HelpCircle, label: 'Help & Support', action: 'support' },
+                { icon: Info, label: 'About Us', action: 'about' }
               ].map((item, index) => (
                 <button 
-                  key={index} 
+                  key={index}
+                  onClick={() => handleNavigation(item.action)}
                   className="flex items-center space-x-3 px-6 py-3 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100/70 dark:hover:bg-gray-700/70 transition-all duration-200 w-full text-left group hover:text-gray-900 dark:hover:text-white"
                 >
                   <item.icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -235,7 +244,10 @@ const ProfileDropdown = () => {
             </div>
 
             <div className="border-t border-gray-200/30 dark:border-gray-700/30">
-              <button className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 w-full text-left group">
+              <button 
+                onClick={() => handleNavigation('login')}
+                className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 w-full text-left group"
+              >
                 <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-medium">Sign Out</span>
               </button>
@@ -248,7 +260,7 @@ const ProfileDropdown = () => {
 };
 
 // Modern Top Bar Component
-const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
+const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
   const [notifications] = useState(3);
   const { theme } = useTheme();
 
@@ -275,7 +287,7 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
             />
             <div>
               <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                3N8 Analytics Platform
+                3N8 Analytics
               </span>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Analytics Platform</p>
             </div>
@@ -296,7 +308,7 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
               )}
             </button>
             
-            <ProfileDropdown />
+            <ProfileDropdown onNavigate={onNavigate} />
           </div>
         </div>
       </div>
@@ -497,6 +509,7 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
         <TopBar 
           sidebarOpen={sidebarOpen} 
           onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
+          onNavigate={onNavigate}
         />
         <main className="w-full">
           {children}

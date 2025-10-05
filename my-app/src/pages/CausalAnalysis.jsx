@@ -1,18 +1,16 @@
-// ...existing code...
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, Upload } from 'lucide-react';
+import React, { useState } from 'react';
+import { TrendingUp, Upload, Plus, X, Sun, Cloud, CloudRain, Zap, Users, Gift, AlertTriangle } from 'lucide-react';
 import {
   ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   Line,
   XAxis,
   YAxis,
   Tooltip,
   Legend,
   CartesianGrid,
-  BarChart,
-  Bar,
-  Area
+  Area,
+  Bar
 } from 'recharts';
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
@@ -20,253 +18,564 @@ import { LayoutWrapper } from './DashboardHome';
 
 const CausalAnalysis = ({ onNavigate }) => {
   const { theme } = useTheme();
-
   const [isLoading, setIsLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [error, setError] = useState('');
-
-  const [causalFactorsData, setCausalFactorsData] = useState([]);
-  const [seasonalData, setSeasonalData] = useState([]);
+  const [file, setFile] = useState(null);
   const [forecastPayload, setForecastPayload] = useState(null);
   const [scenarioGraph, setScenarioGraph] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [featureImportance, setFeatureImportance] = useState([]);
+  const [timeView, setTimeView] = useState('daily');
+  const [causalEvents, setCausalEvents] = useState([]);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    type: 'weather_hot',
+    startDate: '',
+    endDate: '',
+    impact: 25,
+    description: ''
+  });
 
-  const [file, setFile] = useState(null);
-  const [futurePromo, setFuturePromo] = useState('');
-  const [futureHoliday, setFutureHoliday] = useState('');
+  const today = new Date().toISOString().split('T')[0];
 
-  useEffect(() => {
-    setCausalFactorsData([]);
-    setSeasonalData([]);
-  }, []);
+  const getForecastPeriodLimits = () => {
+    if (!scenarioGraph?.rows?.length) return { minDate: today, maxDate: null };
+    const forecastRows = scenarioGraph.rows.filter(row => row.predicted !== null && row.predicted !== undefined);
+    if (!forecastRows.length) return { minDate: today, maxDate: null };
+    return {
+      minDate: forecastRows[0].ds.split('T')[0],
+      maxDate: forecastRows[forecastRows.length - 1].ds.split('T')[0]
+    };
+  };
+  
+  const forecastLimits = getForecastPeriodLimits();
 
-  const normalizeCsvForBackend = async (origFile) => {
-    const txt = await origFile.text();
-    const lines = txt.split(/\r?\n/);
-    if (lines.length === 0) return { file: origFile, hasSku: false };
-    const filtered = lines.filter((ln) => {
-      const cols = ln.split(',');
-      if (cols.length > 1) {
-        const c1 = cols[1] ? cols[1].replace(/(^"|"$)/g, '').trim().toUpperCase() : '';
-        const c0 = cols[0] ? cols[0].replace(/(^"|"$)/g, '').trim().toUpperCase() : '';
-        if (c1 === 'OUTLET' || c0 === 'DATE') return false;
+  const eventTypes = [
+    { value: 'weather_hot', label: 'Hot Weather', icon: Sun, color: '#F59E0B', impact: 25 },
+    { value: 'weather_cold', label: 'Cold Weather', icon: Cloud, color: '#6B7280', impact: -15 },
+    { value: 'weather_rainy', label: 'Rainy Season', icon: CloudRain, color: '#3B82F6', impact: -20 },
+    { value: 'holiday', label: 'Holiday/Festival', icon: Gift, color: '#10B981', impact: 40 },
+    { value: 'event', label: 'Major Event', icon: Users, color: '#8B5CF6', impact: 35 },
+    { value: 'promotion', label: 'Promotion', icon: Zap, color: '#EC4899', impact: 30 },
+    { value: 'disruption', label: 'Supply Disruption', icon: AlertTriangle, color: '#EF4444', impact: -40 }
+  ];
+
+  const runForecastWithEvents = async (uploadedFile, events) => {
+    setIsLoading(true);
+    setUploadStatus('Processing forecast with events...');
+    setError('');
+    
+    try {
+      const causalForm = new FormData();
+      causalForm.append('file', uploadedFile);
+      const causalRes = await fetch('http://127.0.0.1:5000/causal-analysis', { method: 'POST', body: causalForm });
+      if (!causalRes.ok) throw new Error(await causalRes.text() || 'Causal analysis failed');
+      const causalData = await causalRes.json();
+      
+      if (causalData.causal_factors) {
+        setFeatureImportance(causalData.causal_factors.map(f => ({ feature: f.factor, importance: f.correlation })));
       }
-      // drop entirely empty lines
-      if (ln.trim() === '') return false;
-      return true;
-    });
-    const newCsv = filtered.join('\n');
-    const newFile = new File([newCsv], origFile.name, { type: origFile.type });
-    const header = filtered[0] ? filtered[0].split(',').map(h => h.replace(/(^"|"$)/g, '').trim().toLowerCase()) : [];
-    return { file: newFile, hasSku: header.includes('sku') };
+
+      setUploadStatus('Generating 1-year forecast...');
+      const forecastForm = new FormData();
+      forecastForm.append('file', uploadedFile);
+      forecastForm.append('days', '365');
+      const forecastRes = await fetch('http://127.0.0.1:5000/forecast', { method: 'POST', body: forecastForm });
+      if (!forecastRes.ok) throw new Error(await forecastRes.text() || 'Forecast failed');
+      const forecastData = await forecastRes.json();
+
+      if (forecastData.graph?.dates && forecastData.graph?.series) {
+        const { dates, series } = forecastData.graph;
+        const actualSales = series.actual || [];
+        
+        const rows = dates.map((date, i) => {
+          const baseValue = series.base?.[i] || 0;
+          const actualValue = actualSales[i];
+          const isHistorical = actualValue !== null && actualValue !== undefined;
+          let totalImpact = 0;
+          const eventImpacts = {};
+          
+          if (!isHistorical && baseValue > 0) {
+            events.forEach(event => {
+              const currentDate = date.includes('T') ? date.split('T')[0] : date.substring(0, 10);
+              const startDate = (event.startDate.includes('T') ? event.startDate.split('T')[0] : event.startDate);
+              const endDate = ((event.endDate || event.startDate).includes('T') ? (event.endDate || event.startDate).split('T')[0] : (event.endDate || event.startDate));
+              
+              if (currentDate >= startDate && currentDate <= endDate) {
+                const impactValue = baseValue * (event.impact / 100);
+                totalImpact += impactValue;
+                eventImpacts[`${event.typeLabel}_${event.id}`] = impactValue;
+              }
+            });
+          }
+          
+          return {
+            ds: date,
+            actual: isHistorical ? actualValue : null,
+            baseline: isHistorical ? null : baseValue,
+            predicted: isHistorical ? null : Math.max(0, baseValue + totalImpact),
+            upper: isHistorical ? null : Math.max(0, (baseValue + totalImpact) * 1.15),
+            lower: isHistorical ? null : Math.max(0, (baseValue + totalImpact) * 0.85),
+            totalImpact,
+            ...eventImpacts
+          };
+        });
+
+        const allEventKeys = new Set();
+        rows.forEach(row => Object.keys(row).forEach(key => {
+          if (!['ds', 'actual', 'baseline', 'predicted', 'upper', 'lower', 'totalImpact'].includes(key)) allEventKeys.add(key);
+        }));
+
+        setScenarioGraph({ rows, seriesNames: ['actual', 'baseline', 'predicted', 'upper', 'lower'], eventNames: Array.from(allEventKeys) });
+      }
+
+      setForecastPayload(forecastData);
+      setDecisions(forecastData.decisions || []);
+      setUploadStatus('Analysis complete!');
+      
+    } catch (err) {
+      console.error(err);
+      setError(String(err.message || err));
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setUploadStatus(''), 2500);
+    }
   };
 
   const handleFileUploadAndAnalyze = async (e) => {
     const f = e?.target?.files?.[0];
     if (!f) return;
     setFile(f);
-    setIsLoading(true);
-    setUploadStatus('Preparing CSV...');
-    setError('');
-    try {
-      const { file: normalizedFile } = await normalizeCsvForBackend(f);
-
-      setUploadStatus('Running causal analysis...');
-      const form = new FormData();
-      form.append('file', normalizedFile);
-
-      const causalRes = await fetch('http://127.0.0.1:5000/causal-analysis', { method: 'POST', body: form });
-      if (!causalRes.ok) {
-        const txt = await causalRes.text().catch(() => '');
-        throw new Error(txt || 'Causal analysis failed');
-      }
-      const causalJson = await causalRes.json();
-      setCausalFactorsData(causalJson.causal_factors || []);
-      setSeasonalData(causalJson.seasonal_data || []);
-      setUploadStatus('Causal analysis complete.');
-
-      setUploadStatus('Generating forecast (saved model)...');
-      await runForecast({ file: normalizedFile });
-    } catch (err) {
-      console.error(err);
-      setError(String(err.message || err));
-      setUploadStatus('');
-    } finally {
-      setIsLoading(false);
-      setTimeout(() => setUploadStatus(''), 2500);
-    }
+    await runForecastWithEvents(f, causalEvents);
   };
 
-  const runForecast = async ({ file: f }) => {
-    if (!f) {
-      setError('No file selected for forecast.');
-      return;
+  const handleAddEvent = async () => {
+    if (!newEvent.startDate) return alert('Please select a start date');
+    const { minDate, maxDate } = forecastLimits;
+    if (minDate && newEvent.startDate < minDate) return alert(`Start date must be on or after ${minDate}`);
+    if (maxDate && newEvent.startDate > maxDate) return alert(`Start date must be on or before ${maxDate}`);
+    if (newEvent.endDate && minDate && newEvent.endDate < minDate) return alert(`End date must be on or after ${minDate}`);
+    if (newEvent.endDate && maxDate && newEvent.endDate > maxDate) return alert(`End date must be on or before ${maxDate}`);
+    
+    const newStart = new Date(newEvent.startDate);
+    const newEnd = newEvent.endDate ? new Date(newEvent.endDate) : newStart;
+    const hasConflict = causalEvents.some(event => {
+      if (event.type !== newEvent.type) return false;
+      const existingStart = new Date(event.startDate);
+      const existingEnd = event.endDate ? new Date(event.endDate) : existingStart;
+      return (newStart <= existingEnd && newEnd >= existingStart);
+    });
+    
+    if (hasConflict) {
+      const eventType = eventTypes.find(e => e.value === newEvent.type);
+      return alert(`Date conflict! This overlaps with another "${eventType.label}" event.`);
     }
-    setIsLoading(true);
-    setError('');
-    setUploadStatus('Sending forecast request...');
-    try {
-      const form = new FormData();
-      form.append('file', f);
-
-      const causalObj = {};
-      if (futurePromo && futurePromo.trim() !== '') {
-        try { causalObj.promotion = JSON.parse(futurePromo); } catch { causalObj.promotion = Number(futurePromo); }
-      }
-      if (futureHoliday && futureHoliday.trim() !== '') {
-        try { causalObj.holiday = JSON.parse(futureHoliday); } catch { causalObj.holiday = Number(futureHoliday); }
-      }
-      if (Object.keys(causalObj).length > 0) form.append('causal', JSON.stringify(causalObj));
-
-      const resp = await fetch('http://127.0.0.1:5000/forecast', { method: 'POST', body: form });
-      if (!resp.ok) {
-        const txt = await resp.text().catch(() => '');
-        let parsed = null;
-        try { parsed = JSON.parse(txt); } catch {}
-        throw new Error(parsed?.error || txt || `Forecast failed ${resp.status}`);
-      }
-      const data = await resp.json();
-      setForecastPayload(data);
-
-      if (data.graph) {
-        const dates = data.graph.dates || [];
-        const series = data.graph.series || {};
-        const keys = Object.keys(series || {});
-        const seriesKeys = Array.from(new Set(keys)); // dedupe
-        const rows = dates.map((d, i) => {
-          const row = { ds: d };
-          seriesKeys.forEach(k => {
-            row[k] = (series[k] && series[k][i] !== undefined) ? series[k][i] : null;
-          });
-          return row;
-        });
-        setScenarioGraph({ rows, seriesNames: seriesKeys });
-      } else {
-        setScenarioGraph(null);
-      }
-
-      setDecisions(data.decisions || []);
-      setFeatureImportance(data.feature_importance || []);
-      setUploadStatus('Forecast generated.');
-    } catch (err) {
-      console.error('forecast error', err);
-      setError(String(err.message || err));
-      setForecastPayload(null);
-      setScenarioGraph(null);
-      setDecisions([]);
-      setFeatureImportance([]);
-      setUploadStatus('');
-    } finally {
-      setIsLoading(false);
-      setTimeout(() => setUploadStatus(''), 2500);
-    }
+    
+    const eventType = eventTypes.find(e => e.value === newEvent.type);
+    const updatedEvents = [...causalEvents, { ...newEvent, id: Date.now(), typeLabel: eventType.label, color: eventType.color, icon: eventType.icon }];
+    setCausalEvents(updatedEvents);
+    setShowEventModal(false);
+    setNewEvent({ type: 'weather_hot', startDate: '', endDate: '', impact: eventTypes[0].impact, description: '' });
+    if (file) await runForecastWithEvents(file, updatedEvents);
   };
 
-  const forecast = forecastPayload?.forecast || [];
-  const avgDaily = forecast.length ? Math.round(forecast.reduce((s, f) => s + (f.pred || 0), 0) / forecast.length) : 0;
+  const handleRemoveEvent = async (id) => {
+    const updatedEvents = causalEvents.filter(e => e.id !== id);
+    setCausalEvents(updatedEvents);
+    if (file) await runForecastWithEvents(file, updatedEvents);
+  };
+
+  const aggregateData = (data, view) => {
+    if (!data?.length || view === 'daily') return data || [];
+    const grouped = {};
+    
+    data.forEach((item) => {
+      const date = new Date(item.ds);
+      let groupKey, sortKey;
+      
+      switch(view) {
+        case 'weekly':
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() - date.getDay());
+          sortKey = weekStart.toISOString();
+          groupKey = `W${Math.ceil(weekStart.getDate() / 7)} ${weekStart.toLocaleString('default', { month: 'short' })} ${weekStart.getFullYear()}`;
+          break;
+        case 'monthly':
+          sortKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          groupKey = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+          break;
+        case 'quarterly':
+          const quarter = Math.floor(date.getMonth() / 3) + 1;
+          sortKey = `${date.getFullYear()}-Q${quarter}`;
+          groupKey = `Q${quarter} ${date.getFullYear()}`;
+          break;
+        case 'yearly':
+          sortKey = groupKey = `${date.getFullYear()}`;
+          break;
+        default:
+          sortKey = groupKey = item.ds;
+      }
+      
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = { ds: groupKey, sortKey, actual: 0, baseline: 0, predicted: 0, upper: 0, lower: 0, totalImpact: 0, actualCount: 0, forecastCount: 0 };
+        scenarioGraph?.eventNames?.forEach(eventName => { grouped[groupKey][eventName] = 0; });
+      }
+      
+      if (item.actual != null) {
+        grouped[groupKey].actual += item.actual;
+        grouped[groupKey].actualCount += 1;
+      }
+      if (item.baseline != null) {
+        grouped[groupKey].baseline += item.baseline;
+        grouped[groupKey].forecastCount += 1;
+      }
+      if (item.predicted != null) grouped[groupKey].predicted += item.predicted;
+      grouped[groupKey].upper += (item.upper || 0);
+      grouped[groupKey].lower += (item.lower || 0);
+      grouped[groupKey].totalImpact += (item.totalImpact || 0);
+      scenarioGraph?.eventNames?.forEach(eventName => { if (item[eventName]) grouped[groupKey][eventName] += item[eventName]; });
+    });
+    
+    return Object.values(grouped).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).map(g => {
+      const result = { ...g };
+      result.actual = result.actualCount > 0 ? result.actual : null;
+      result.baseline = result.forecastCount > 0 ? result.baseline : null;
+      result.predicted = result.forecastCount > 0 ? result.predicted : null;
+      result.upper = result.forecastCount > 0 ? result.upper : null;
+      result.lower = result.forecastCount > 0 ? result.lower : null;
+      delete result.actualCount; delete result.forecastCount; delete result.sortKey;
+      return result;
+    });
+  };
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 shadow-xl">
+        <p className="text-white font-semibold mb-2">{label}</p>
+        <div className="space-y-1">
+          {payload.map((entry, i) => (
+            <div key={i} className="flex items-center justify-between space-x-4">
+              <span className="text-sm" style={{ color: entry.color }}>{entry.name}:</span>
+              <span className="text-sm font-bold text-white">{entry.value ? Math.round(entry.value).toLocaleString() : '—'}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const displayData = scenarioGraph ? aggregateData(scenarioGraph.rows, timeView) : [];
+  const forecastData = displayData.filter(d => d.predicted !== null);
+  const avgPredicted = forecastData.length ? Math.round(forecastData.reduce((s, f) => s + (f.predicted || 0), 0) / forecastData.length) : 0;
+  const eventColors = {};
+  causalEvents.forEach(event => { eventColors[`${event.typeLabel}_${event.id}`] = event.color; });
+  const getChartHeight = () => ({ daily: 450, weekly: 400, monthly: 380, quarterly: 350 }[timeView] || 320);
 
   return (
     <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
       <div className="pt-24">
-        <Header title="Causal Analysis" description="Factor Impact, Forecasting & Insights (uses saved model)" icon={TrendingUp} />
-
+        <Header title="Causal Analysis & Events" description="Factor Impact, Event Planning & Advanced Forecasting for Beverage Sales" icon={TrendingUp} />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="space-y-6">
+            
             <Card className="p-6">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                 <div>
-                  <h2 className="text-lg font-semibold">Upload CSV</h2>
-                  <p className="text-sm">CSV must follow: Date, OUTLET, SKU, Value (header repeat rows removed automatically).</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Upload historical sales data (CSV format)</p>
                 </div>
-
-                <div className="flex items-center space-x-3">
-                  <label className={`flex items-center space-x-2 px-4 py-2 ${theme.primary} text-white rounded-lg cursor-pointer ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                    <Upload size={18} />
-                    <span>{isLoading ? 'Processing...' : 'Upload CSV'}</span>
-                    <input type="file" accept=".csv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
-                  </label>
-
-                  <button onClick={() => runForecast({ file })} disabled={!file || isLoading} className={`px-4 py-2 rounded-lg text-white ${!file || isLoading ? 'bg-gray-400' : theme.primary}`}>
-                    Forecast
-                  </button>
-                </div>
+                <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
+                  <Upload size={18} />
+                  <span>{isLoading ? 'Processing...' : 'Upload CSV'}</span>
+                  <input type="file" accept=".csv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
+                </label>
               </div>
-
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <input value={futurePromo} onChange={(e) => setFuturePromo(e.target.value)} placeholder='Promotion override (0 or "[0,1,1,...]")' className="px-3 py-2 rounded-lg border" />
-                <input value={futureHoliday} onChange={(e) => setFutureHoliday(e.target.value)} placeholder='Holiday override (optional)' className="px-3 py-2 rounded-lg border" />
-                <div className="flex items-center"><span className="text-sm">{uploadStatus}</span></div>
-              </div>
-
-              {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
+              {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
+              {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-lg font-semibold mb-4">Forecast & Scenarios</h2>
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Causal Events</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Plan and manage events that impact beverage sales</p>
+                </div>
+                <button onClick={() => setShowEventModal(true)} className="flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all hover:scale-105" style={{ backgroundColor: theme.chart }}>
+                  <Plus size={18} /><span>Add Event</span>
+                </button>
+              </div>
+              <div className="space-y-2">
+                {causalEvents.length === 0 ? (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No causal events added yet. Click "Add Event" to start planning.</div>
+                ) : causalEvents.map(event => {
+                  const Icon = event.icon;
+                  return (
+                    <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-lg" style={{ backgroundColor: event.color + '20' }}>
+                          <Icon className="w-5 h-5" style={{ color: event.color }} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">{event.typeLabel}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {event.startDate} {event.endDate && `to ${event.endDate}`} • Impact: {event.impact > 0 ? '+' : ''}{event.impact}%
+                          </p>
+                          {event.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{event.description}</p>}
+                        </div>
+                      </div>
+                      <button onClick={() => handleRemoveEvent(event.id)} className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                        <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
 
-              {scenarioGraph ? (
-                <div style={{ height: 360 }}>
+            {showEventModal && (
+              <>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowEventModal(false)} />
+                <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+                  <Card className="w-full max-w-lg p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Causal Event</h3>
+                      <button onClick={() => setShowEventModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Event Type</label>
+                        <select value={newEvent.type} onChange={(e) => {
+                          const selected = eventTypes.find(t => t.value === e.target.value);
+                          setNewEvent({ ...newEvent, type: e.target.value, impact: selected?.impact || 0 });
+                        }} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white">
+                          {eventTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
+                          <input type="date" value={newEvent.startDate} onChange={(e) => setNewEvent({...newEvent, startDate: e.target.value})} min={forecastLimits.minDate || today} max={forecastLimits.maxDate || undefined} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date (Optional)</label>
+                          <input type="date" value={newEvent.endDate} onChange={(e) => setNewEvent({...newEvent, endDate: e.target.value})} min={newEvent.startDate || forecastLimits.minDate || today} max={forecastLimits.maxDate || undefined} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Impact (%)</label>
+                        <input type="number" value={newEvent.impact} onChange={(e) => setNewEvent({...newEvent, impact: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" placeholder="e.g., 25 for +25% or -15 for -15%" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description (Optional)</label>
+                        <textarea value={newEvent.description} onChange={(e) => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" rows={3} placeholder="Additional notes about this event..." />
+                      </div>
+                      <button onClick={handleAddEvent} disabled={isLoading} className="w-full py-2 rounded-xl text-white font-medium transition-all hover:scale-[1.02] disabled:opacity-50" style={{ backgroundColor: theme.chart }}>
+                        {isLoading ? 'Adding Event...' : 'Add Event'}
+                      </button>
+                    </div>
+                  </Card>
+                </div>
+              </>
+            )}
+
+            <Card className="p-6">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Combined Sales Overview</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Historical data and forecast with events</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
+                    <button key={view} onClick={() => setTimeView(view)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${timeView === view ? 'text-white shadow-lg' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`} style={timeView === view ? { backgroundColor: theme.chart } : {}}>
+                      {view.charAt(0).toUpperCase() + view.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {displayData.length > 0 ? (
+                <div style={{ height: getChartHeight() }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={scenarioGraph.rows}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="ds" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      {scenarioGraph.seriesNames.map((name, idx) => (
-                        <Line key={name} dataKey={name} name={name} stroke={idx === 0 ? theme.chart : (idx % 2 ? "#f59e0b" : "#ef4444")} dot={false} strokeWidth={2} />
-                      ))}
-                    </LineChart>
+                    <ComposedChart data={displayData} margin={{ top: 10, right: 30, left: 10, bottom: timeView === 'daily' ? 80 : 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: timeView === 'daily' ? 10 : 11, fill: '#9CA3AF' }} angle={timeView === 'daily' ? -45 : timeView === 'weekly' ? -35 : 0} textAnchor={timeView === 'daily' || timeView === 'weekly' ? 'end' : 'middle'} height={timeView === 'daily' ? 80 : 60} interval={timeView === 'daily' && displayData.length > 30 ? Math.floor(displayData.length / 20) : 0} />
+                      <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
+                      <Area type="monotone" dataKey="upper" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Upper Bound" />
+                      <Area type="monotone" dataKey="lower" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Lower Bound" />
+                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') && (
+                        <>
+                          <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.3} name="Baseline (No Events)" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="predicted" fill={theme.chart} fillOpacity={0.7} name="Predicted with Events" radius={[4, 4, 0, 0]} />
+                        </>
+                      )}
+                      {(timeView === 'daily' || timeView === 'weekly') && (
+                        <>
+                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} dot={{ fill: '#10B981', r: 4 }} activeDot={{ r: 6 }} name="Actual Sales" />
+                          <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline (No Events)" />
+                          <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Predicted with Events" />
+                        </>
+                      )}
+                      {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                        const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                        return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={`Impact: ${eventName.split('_').slice(0, -1).join(' ')}`} />;
+                      })}
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="text-sm text-gray-500">No scenario graph available. Upload CSV and generate forecast to see graph.</div>
+                <div className="text-center py-16 text-gray-500 dark:text-gray-400">
+                  <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                  <p>Upload data to see forecast visualization</p>
+                </div>
               )}
-
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded border border-transparent bg-green-50 text-gray-800 dark:bg-green-900/30 dark:border-green-800 dark:text-gray-100">
-                <div className="text-sm">Avg Daily (30d)</div>
-                <div className="text-2xl font-bold">{avgDaily.toLocaleString()}</div>
-              </div>
-
-              <div className="p-4 rounded border border-transparent bg-blue-50 text-gray-800 dark:bg-slate-800/60 dark:border-slate-700 dark:text-gray-100">
-                <div className="text-sm">Model</div>
-                <div className="text-lg font-medium">{forecastPayload?.model_used || 'saved_model'}</div>
-              </div>
-
-              <div className="p-4 rounded border border-transparent bg-yellow-50 text-gray-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-gray-100">
-                <div className="text-sm">Monthly Total (pred)</div>
-                <div className="text-2xl font-bold">{forecastPayload?.monthly_total ? Number(forecastPayload.monthly_total).toLocaleString() : '—'}</div>
-              </div>
-            </div>
-            </Card>
-
-            <Card className="p-6">
-              <h3 className="text-lg">Decisions & Recommendations</h3>
-              <div className="mt-3">
-                {decisions.length === 0 && <div className="text-sm text-gray-500">No decisions generated.</div>}
-                {decisions.map((d, i) => (
-                  <div key={i} className="py-2 border-b last:border-b-0">
-                    <div className="text-sm font-medium">{d.scenario}</div>
-                    <div className="text-sm">{d.advice} (avg change {d.avg_change_pct?.toFixed(1) ?? 0}%)</div>
+              {forecastPayload && displayData.length > 0 && (
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                    <div className="text-sm font-medium text-green-800 dark:text-green-400">Avg {timeView === 'daily' ? 'Daily' : timeView === 'weekly' ? 'Weekly' : timeView === 'monthly' ? 'Monthly' : timeView === 'quarterly' ? 'Quarterly' : 'Yearly'} Sales</div>
+                    <div className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{avgPredicted.toLocaleString()}</div>
+                    {causalEvents.length > 0 && <div className="text-xs text-green-700 dark:text-green-400 mt-2">With {causalEvents.length} event{causalEvents.length > 1 ? 's' : ''} impact</div>}
                   </div>
-                ))}
-              </div>
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                    <div className="text-sm font-medium text-blue-800 dark:text-blue-400">Total Forecast Period</div>
+                    <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{Math.round(displayData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
+                    <div className="text-xs text-blue-700 dark:text-blue-400 mt-2">{displayData.length} {timeView === 'daily' ? 'days' : timeView === 'weekly' ? 'weeks' : timeView === 'monthly' ? 'months' : timeView === 'quarterly' ? 'quarters' : 'years'}</div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                    <div className="text-sm font-medium text-purple-800 dark:text-purple-400">Active Events</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">{causalEvents.length}</div>
+                    <div className="text-xs text-purple-700 dark:text-purple-400 mt-2">{causalEvents.filter(e => e.impact > 0).length} positive, {causalEvents.filter(e => e.impact < 0).length} negative</div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
+                    <div className="text-sm font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
+                    <div className="text-2xl font-bold text-orange-900 dark:text-orange-300 mt-1">
+                      {(() => {
+                        const totalPredicted = displayData.reduce((sum, d) => sum + (d.predicted || 0), 0);
+                        const totalBaseline = displayData.reduce((sum, d) => sum + (d.baseline || 0), 0);
+                        const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
+                        return (impact > 0 ? '+' : '') + impact.toFixed(1);
+                      })()}%
+                    </div>
+                    <div className="text-xs text-orange-700 dark:text-orange-400 mt-2">vs baseline forecast</div>
+                  </div>
+                </div>
+              )}
             </Card>
 
-            <Card className="p-6">
-              <h3 className="text-lg">Feature Importance</h3>
-              <div className="mt-3">
-                {featureImportance.length === 0 && <div className="text-sm text-gray-500">No feature importance available from model.</div>}
-                {featureImportance.slice(0, 12).map((f, i) => (
-                  <div key={i} className="flex justify-between py-1">
-                    <div className="text-sm">{f.feature}</div>
-                    <div className="text-sm font-medium">{(f.importance * 100).toFixed(1)}%</div>
-                  </div>
-                ))}
-              </div>
-            </Card>
+            {displayData.filter(d => d.actual !== null).length > 0 && (
+              <Card className="p-6">
+                <div className="mb-6">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Historical Sales Data</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Actual sales performance - {displayData.filter(d => d.actual !== null).length} data points</p>
+                </div>
+                <div style={{ height: 400 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                      <defs>
+                        <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 0 : -35} textAnchor={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 'middle' : 'end'} height={60} interval={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 0 : Math.floor(displayData.filter(d => d.actual !== null).length / 15) || 0} />
+                      <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ paddingTop: '20px' }} iconType={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 'rect' : 'line'} />
+                      {timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? (
+                        <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
+                      ) : (
+                        <>
+                          <Area type="monotone" dataKey="actual" fill="url(#colorActual)" stroke="none" />
+                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} dot={{ fill: '#10B981', r: 3, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 2 }} name="Actual Sales" />
+                        </>
+                      )}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            )}
+
+            {displayData.filter(d => d.predicted !== null || d.baseline !== null).length > 0 && (
+              <Card className="p-6">
+                <div className="mb-6">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Forecast with Event Impact</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Future predictions showing baseline vs event-adjusted forecast</p>
+                </div>
+                <div style={{ height: 400 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={displayData.filter(d => d.predicted !== null || d.baseline !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                      <defs>
+                        <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={theme.chart} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={theme.chart} stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-35} textAnchor="end" height={60} interval={Math.floor(displayData.filter(d => d.predicted !== null).length / 15) || 0} />
+                      <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
+                      <Area type="monotone" dataKey="upper" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Upper Confidence" />
+                      <Area type="monotone" dataKey="lower" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Lower Confidence" />
+                      <Area type="monotone" dataKey="predicted" fill="url(#colorPredicted)" stroke="none" />
+                      <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} name="Baseline (No Events)" />
+                      <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3.5} dot={{ fill: theme.chart, r: 3, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 2 }} name="Predicted with Events" />
+                      {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                        const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                        return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={`${eventName.split('_').slice(0, -1).join(' ')} Impact`} />;
+                      })}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            )}
+
+            {decisions.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Decisions & Recommendations</h3>
+                <div className="space-y-3">
+                  {decisions.map((d, i) => (
+                    <div key={i} className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-gray-200 dark:border-gray-600">
+                      <div className="flex items-start space-x-3">
+                        <div className="p-2 rounded-lg mt-1" style={{ backgroundColor: theme.chart + '20' }}>
+                          <TrendingUp className="w-5 h-5" style={{ color: theme.chart }} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">{d.scenario}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">{d.advice}</div>
+                          <div className="text-xs font-medium mt-2" style={{ color: theme.chart }}>Expected Change: {d.avg_change_pct > 0 ? '+' : ''}{d.avg_change_pct.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {featureImportance.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Feature Importance</h3>
+                <div className="space-y-3">
+                  {featureImportance.slice(0, 8).map((f, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">{f.feature}</span>
+                        <span className="font-semibold" style={{ color: theme.chart }}>{(f.importance * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${f.importance * 100}%`, backgroundColor: theme.chart }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
           </div>
         </main>

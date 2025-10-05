@@ -12,12 +12,10 @@ import {
   X,
   ChevronDown,
   Home,
-  Moon,
-  Sun,
-  Palette,
   Search,
   Info,
-  UserPlus
+  UserPlus,
+  Calendar
 } from 'lucide-react';
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
@@ -35,7 +33,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
 
   return (
     <>
-      {/* Backdrop Overlay */}
       {isOpen && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300"
@@ -43,12 +40,10 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
         />
       )}
       
-      {/* Sidebar - Slides in from left */}
       <div className={`fixed left-0 top-0 h-full bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-700/50 z-50 transition-all duration-300 ease-out shadow-2xl ${
         isOpen ? 'w-80 translate-x-0' : 'w-80 -translate-x-full'
       }`}>
         
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200/30 dark:border-gray-700/30">
           <div className="flex items-center space-x-3">
             <img 
@@ -71,7 +66,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </button>
         </div>
 
-        {/* Search Bar */}
         <div className="p-6 pb-4">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -84,7 +78,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </div>
         </div>
 
-        {/* Navigation */}
         <div className="flex-1 px-6 py-2">
           <nav className="space-y-2">
             {navigationItems.map((item) => {
@@ -116,7 +109,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </nav>
         </div>
 
-        {/* Bottom Section */}
         <div className="p-6 border-t border-gray-200/30 dark:border-gray-700/30">
           <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl">
             <div 
@@ -137,18 +129,9 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
   );
 };
 
-// Modern Profile Component
 const ProfileDropdown = ({ onNavigate }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const { theme, darkMode, colorTheme, toggleDarkMode, setColorTheme } = useTheme();
-
-  const handleDarkModeToggle = () => {
-    toggleDarkMode();
-  };
-
-  const handleColorThemeChange = (themeKey) => {
-    setColorTheme(themeKey);
-  };
+  const { theme } = useTheme();
 
   const handleNavigation = (page) => {
     if (onNavigate) {
@@ -156,19 +139,6 @@ const ProfileDropdown = ({ onNavigate }) => {
     }
     setIsProfileOpen(false);
   };
-
-  const colorThemes = [
-    { key: 'blue', name: 'Ocean Blue', hex: '#3B82F6' },
-    { key: 'purple', name: 'Royal Purple', hex: '#A855F7' },
-    { key: 'emerald', name: 'Emerald Green', hex: '#10B981' },
-    { key: 'orange', name: 'Sunset Orange', hex: '#F97316' },
-    { key: 'rose', name: 'Rose Pink', hex: '#F43F5E' },
-    { key: 'indigo', name: 'Deep Indigo', hex: '#6366F1' },
-    { key: 'cyan', name: 'Bright Cyan', hex: '#06B6D4' },
-    { key: 'amber', name: 'Golden Amber', hex: '#F59E0B' },
-    { key: 'teal', name: 'Ocean Teal', hex: '#14B8A6' },
-    { key: 'pink', name: 'Hot Pink', hex: '#EC4899' }
-  ];
 
   return (
     <div className="relative">
@@ -192,17 +162,14 @@ const ProfileDropdown = ({ onNavigate }) => {
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Modern Profile dropdown */}
       {isProfileOpen && (
         <>
-          {/* Click outside overlay */}
           <div
             className="fixed inset-0 z-40"
             onClick={() => setIsProfileOpen(false)}
           />
           
           <div className="absolute right-0 top-full mt-3 w-80 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 z-50 overflow-hidden">
-            {/* Profile info */}
             <div className="px-6 py-5 border-b border-gray-200/30 dark:border-gray-700/30">
               <div className="flex items-center space-x-4">
                 <div 
@@ -224,7 +191,6 @@ const ProfileDropdown = ({ onNavigate }) => {
               </div>
             </div>
 
-            {/* Profile menu items */}
             <div className="py-2">
               {[
                 { icon: User, label: 'View Profile', action: 'profile' },
@@ -245,12 +211,23 @@ const ProfileDropdown = ({ onNavigate }) => {
 
             <div className="border-t border-gray-200/30 dark:border-gray-700/30">
               <button 
-                onClick={() => handleNavigation('login')}
+                onClick={() => {
+                  // 🔹 Clear auth (adjust to your auth method)
+                  localStorage.removeItem("authToken");
+                  sessionStorage.clear();
+
+                  // 🔹 Optionally call backend logout endpoint
+                  // await fetch('/api/logout', { method: 'POST' });
+
+                  // 🔹 Navigate to login
+                  handleNavigation("login");
+                }}
                 className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 w-full text-left group"
               >
                 <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-medium">Sign Out</span>
               </button>
+
             </div>
           </div>
         </>
@@ -259,7 +236,6 @@ const ProfileDropdown = ({ onNavigate }) => {
   );
 };
 
-// Modern Top Bar Component
 const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
   const [notifications] = useState(3);
   const { theme } = useTheme();
@@ -268,7 +244,6 @@ const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
     <header className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 z-30">
       <div className="max-w-full mx-auto px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between relative">
-          {/* Left side - Hamburger */}
           <div className="flex items-center">
             <button
               onClick={onSidebarToggle}
@@ -278,7 +253,6 @@ const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
             </button>
           </div>
 
-          {/* Center - App Title */}
           <div className="flex items-center space-x-3">
             <img 
               src="3N8.png" 
@@ -293,9 +267,7 @@ const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
             </div>
           </div>
 
-          {/* Right side - Notifications + Profile */}
           <div className="flex items-center space-x-2 sm:space-x-4">
-            {/* Notifications */}
             <button className="relative p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 rounded-xl sm:rounded-2xl hover:bg-gray-100/70 dark:hover:bg-gray-800/70 hover:scale-105 active:scale-95 hidden xs:block">
               <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
               {notifications > 0 && (
@@ -316,7 +288,6 @@ const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
   );
 };
 
-// Dashboard Content Component
 const DashboardContent = ({ onNavigate }) => {
   const { theme } = useTheme();
 
@@ -473,7 +444,6 @@ const DashboardContent = ({ onNavigate }) => {
   );
 };
 
-// Modern Layout Wrapper Component
 const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
   const [activeTab, setActiveTab] = useState(currentPage || 'home');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -519,7 +489,6 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
   );
 };
 
-// Main Dashboard Component
 const DashboardHome = ({ onNavigate = () => {} }) => {
   return (
     <LayoutWrapper currentPage="home" onNavigate={onNavigate}>

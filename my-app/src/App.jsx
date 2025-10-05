@@ -10,9 +10,10 @@ import AboutUs from "./pages/AboutUs";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
 import AccountSettings from "./pages/AccountSettings";
+import GetStarted from "./pages/GetStarted"; // 👈 new page
 
 const App = () => {
-  const [currentPage, setCurrentPage] = useState("login");
+  const [currentPage, setCurrentPage] = useState("getstarted"); // 👈 default page
 
   const handleNavigation = (page) => {
     setCurrentPage(page);
@@ -21,6 +22,7 @@ const App = () => {
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-sans">
+        {currentPage === "getstarted" && <GetStarted onNavigate={handleNavigation} />}
         {currentPage === "home" && <DashboardHome onNavigate={handleNavigation} />}
         {currentPage === "overview" && <Overview onNavigate={handleNavigation} />}
         {currentPage === "causal-analysis" && <CausalAnalysis onNavigate={handleNavigation} />}

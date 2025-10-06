@@ -246,7 +246,7 @@ const Login = ({ onNavigate }) => {
           />
         </div>
         <h2 className="text-2xl font-semibold text-center text-gray-800 dark:text-white mb-6">
-          {resetMode ? "Reset Password" : "Welcome Back"}
+          {resetMode ? "Reset Password" : "Sign In to Your Account"}
         </h2>
 
         {error && (

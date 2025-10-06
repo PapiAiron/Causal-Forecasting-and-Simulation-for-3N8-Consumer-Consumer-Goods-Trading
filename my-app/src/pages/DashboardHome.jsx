@@ -315,12 +315,7 @@ const DashboardContent = ({ onNavigate }) => {
     }
   ];
 
-  const quickStats = [
-    { label: 'Total Products', value: '248', change: '+12%', positive: true },
-    { label: 'Active Simulations', value: '3', change: '+1', positive: true },
-    { label: 'Forecast Accuracy', value: '92.5%', change: '+2.3%', positive: true },
-    { label: 'System Uptime', value: '99.8%', change: '0%', positive: true }
-  ];
+
 
   return (
     <div className="pt-24">
@@ -331,25 +326,7 @@ const DashboardContent = ({ onNavigate }) => {
       />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {quickStats.map((stat, index) => (
-            <Card key={index} className="p-6 hover:shadow-lg transition-all duration-200">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{stat.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
-                </div>
-                <span className={`text-sm font-medium px-2 py-1 rounded-full ${
-                  stat.positive 
-                    ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400' 
-                    : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400'
-                }`}>
-                  {stat.change}
-                </span>
-              </div>
-            </Card>
-          ))}
-        </div>
+        
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {dashboardCards.map((card) => {

@@ -210,6 +210,14 @@ const SignUp = ({ onNavigate }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-8">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-8">
+        {/* Logo at the top */}
+        <div className="flex justify-center mb-6">
+          <img 
+            src="/3N8.png" 
+            alt="3N8 Logo" 
+            className="h-16 w-auto object-contain"
+          />
+        </div>
         <h2 className="text-2xl font-semibold text-center text-gray-800 dark:text-white mb-6">
           Create an Account
         </h2>
@@ -303,7 +311,7 @@ const SignUp = ({ onNavigate }) => {
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
               disabled={loading}
             >
-              {showConfirmPassword ? "Hide" : "Show"}
+              {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
 

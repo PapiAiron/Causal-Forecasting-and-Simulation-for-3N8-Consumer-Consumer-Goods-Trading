@@ -41,7 +41,7 @@ const CausalAnalysis = ({ onNavigate }) => {
 
   const getForecastPeriodLimits = () => {
     if (!scenarioGraph?.rows?.length) return { minDate: today, maxDate: null };
-    const forecastRows = scenarioGraph.rows.filter(row => row.predicted !== null && row.predicted !== undefined);
+    const forecastRows = scenarioGraph.rows.filter(row => row.predicted !== null && row.predicted !== undefined && row.predicted > 0);
     if (!forecastRows.length) return { minDate: today, maxDate: null };
     return {
       minDate: forecastRows[0].ds.split('T')[0],
@@ -90,44 +90,51 @@ const CausalAnalysis = ({ onNavigate }) => {
         const actualSales = series.actual || [];
         
         const rows = dates.map((date, i) => {
-          const baseValue = series.base?.[i] || 0;
-          const actualValue = actualSales[i];
-          const isHistorical = actualValue !== null && actualValue !== undefined;
-          let totalImpact = 0;
-          const eventImpacts = {};
-          
-          if (!isHistorical && baseValue > 0) {
-            events.forEach(event => {
-              const currentDate = date.includes('T') ? date.split('T')[0] : date.substring(0, 10);
-              const startDate = (event.startDate.includes('T') ? event.startDate.split('T')[0] : event.startDate);
-              const endDate = ((event.endDate || event.startDate).includes('T') ? (event.endDate || event.startDate).split('T')[0] : (event.endDate || event.startDate));
-              
-              if (currentDate >= startDate && currentDate <= endDate) {
-                const impactValue = baseValue * (event.impact / 100);
-                totalImpact += impactValue;
-                eventImpacts[`${event.typeLabel}_${event.id}`] = impactValue;
-              }
-            });
-          }
-          
-          return {
-            ds: date,
-            actual: isHistorical ? actualValue : null,
-            baseline: isHistorical ? null : baseValue,
-            predicted: isHistorical ? null : Math.max(0, baseValue + totalImpact),
-            upper: isHistorical ? null : Math.max(0, (baseValue + totalImpact) * 1.15),
-            lower: isHistorical ? null : Math.max(0, (baseValue + totalImpact) * 0.85),
-            totalImpact,
-            ...eventImpacts
-          };
+            const baseValue = series.base?.[i];
+            const actualValue = actualSales[i];
+            const isHistorical = actualValue !== null && actualValue !== undefined;
+            let totalImpact = 0;
+            const eventImpacts = {};
+            
+            const validBaseValue = (baseValue !== null && baseValue !== undefined && !isNaN(baseValue) && baseValue > 0) ? baseValue : null;
+            
+            if (!isHistorical && validBaseValue !== null) {
+              events.forEach(event => {
+                const currentDate = date.includes('T') ? date.split('T')[0] : date.substring(0, 10);
+                const startDate = (event.startDate.includes('T') ? event.startDate.split('T')[0] : event.startDate);
+                const endDate = ((event.endDate || event.startDate).includes('T') ? (event.endDate || event.startDate).split('T')[0] : (event.endDate || event.startDate));
+                
+                if (currentDate >= startDate && currentDate <= endDate) {
+                  const impactValue = validBaseValue * (event.impact / 100);
+                  totalImpact += impactValue;
+                  eventImpacts[`${event.typeLabel}_${event.id}`] = impactValue;
+                }
+              });
+            }
+            
+            return {
+              ds: date,
+              actual: isHistorical ? actualValue : null,
+              baseline: (!isHistorical && validBaseValue !== null) ? validBaseValue : null,
+              predicted: (!isHistorical && validBaseValue !== null) ? Math.max(0, validBaseValue + totalImpact) : null,
+              upper: (!isHistorical && validBaseValue !== null) ? Math.max(0, (validBaseValue + totalImpact) * 1.15) : null,
+              lower: (!isHistorical && validBaseValue !== null) ? Math.max(0, (validBaseValue + totalImpact) * 0.85) : null,
+              totalImpact,
+              ...eventImpacts
+            };
+          });
+       
+        const validRows = rows.filter(row => {
+          if (row.actual !== null) return true;
+          return row.predicted !== null && row.predicted > 0;
         });
 
         const allEventKeys = new Set();
-        rows.forEach(row => Object.keys(row).forEach(key => {
+        validRows.forEach(row => Object.keys(row).forEach(key => {
           if (!['ds', 'actual', 'baseline', 'predicted', 'upper', 'lower', 'totalImpact'].includes(key)) allEventKeys.add(key);
         }));
 
-        setScenarioGraph({ rows, seriesNames: ['actual', 'baseline', 'predicted', 'upper', 'lower'], eventNames: Array.from(allEventKeys) });
+        setScenarioGraph({ rows: validRows, seriesNames: ['actual', 'baseline', 'predicted', 'upper', 'lower'], eventNames: Array.from(allEventKeys) });
       }
 
       setForecastPayload(forecastData);
@@ -222,15 +229,15 @@ const CausalAnalysis = ({ onNavigate }) => {
         scenarioGraph?.eventNames?.forEach(eventName => { grouped[groupKey][eventName] = 0; });
       }
       
-      if (item.actual != null) {
+      if (item.actual != null && item.actual > 0) {
         grouped[groupKey].actual += item.actual;
         grouped[groupKey].actualCount += 1;
       }
-      if (item.baseline != null) {
+      if (item.baseline != null && item.baseline > 0) {
         grouped[groupKey].baseline += item.baseline;
         grouped[groupKey].forecastCount += 1;
       }
-      if (item.predicted != null) grouped[groupKey].predicted += item.predicted;
+      if (item.predicted != null && item.predicted > 0) grouped[groupKey].predicted += item.predicted;
       grouped[groupKey].upper += (item.upper || 0);
       grouped[groupKey].lower += (item.lower || 0);
       grouped[groupKey].totalImpact += (item.totalImpact || 0);
@@ -267,7 +274,7 @@ const CausalAnalysis = ({ onNavigate }) => {
   };
 
   const displayData = scenarioGraph ? aggregateData(scenarioGraph.rows, timeView) : [];
-  const forecastData = displayData.filter(d => d.predicted !== null);
+  const forecastData = displayData.filter(d => d.predicted !== null && d.predicted > 0);
   const avgPredicted = forecastData.length ? Math.round(forecastData.reduce((s, f) => s + (f.predicted || 0), 0) / forecastData.length) : 0;
   const eventColors = {};
   causalEvents.forEach(event => { eventColors[`${event.typeLabel}_${event.id}`] = event.color; });
@@ -385,7 +392,7 @@ const CausalAnalysis = ({ onNavigate }) => {
             <Card className="p-6">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Combined Sales Overview</h2>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">1. Combined Sales Overview</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Historical data and forecast with events</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -405,26 +412,29 @@ const CausalAnalysis = ({ onNavigate }) => {
                       <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
-                      <Area type="monotone" dataKey="upper" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Upper Bound" />
-                      <Area type="monotone" dataKey="lower" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Lower Bound" />
-                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') && (
+                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                         <>
                           <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.3} name="Baseline (No Events)" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="predicted" fill={theme.chart} fillOpacity={0.7} name="Predicted with Events" radius={[4, 4, 0, 0]} />
+                          {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                            const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                            return <Bar key={eventName} dataKey={eventName} fill={color} fillOpacity={0.5} name={`Impact: ${eventName.split('_').slice(0, -1).join(' ')}`} radius={[4, 4, 0, 0]} />;
+                          })}
                         </>
-                      )}
-                      {(timeView === 'daily' || timeView === 'weekly') && (
+                      ) : (
                         <>
-                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} dot={{ fill: '#10B981', r: 4 }} activeDot={{ r: 6 }} name="Actual Sales" />
-                          <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline (No Events)" />
-                          <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Predicted with Events" />
+                          <Area type="monotone" dataKey="upper" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Upper Bound" />
+                          <Area type="monotone" dataKey="lower" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Lower Bound" />
+                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} dot={{ fill: '#10B981', r: 4 }} activeDot={{ r: 6 }} name="Actual Sales" connectNulls={false} />
+                          <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline (No Events)" connectNulls={true} />
+                          <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Predicted with Events" connectNulls={true} />
+                          {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                            const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                            return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={`Impact: ${eventName.split('_').slice(0, -1).join(' ')}`} connectNulls={true} />;
+                          })}
                         </>
                       )}
-                      {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                        const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                        return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={`Impact: ${eventName.split('_').slice(0, -1).join(' ')}`} />;
-                      })}
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -434,6 +444,7 @@ const CausalAnalysis = ({ onNavigate }) => {
                   <p>Upload data to see forecast visualization</p>
                 </div>
               )}
+              
               {forecastPayload && displayData.length > 0 && (
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
@@ -443,8 +454,8 @@ const CausalAnalysis = ({ onNavigate }) => {
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
                     <div className="text-sm font-medium text-blue-800 dark:text-blue-400">Total Forecast Period</div>
-                    <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{Math.round(displayData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
-                    <div className="text-xs text-blue-700 dark:text-blue-400 mt-2">{displayData.length} {timeView === 'daily' ? 'days' : timeView === 'weekly' ? 'weeks' : timeView === 'monthly' ? 'months' : timeView === 'quarterly' ? 'quarters' : 'years'}</div>
+                    <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
+                    <div className="text-xs text-blue-700 dark:text-blue-400 mt-2">{forecastData.length} {timeView === 'daily' ? 'days' : timeView === 'weekly' ? 'weeks' : timeView === 'monthly' ? 'months' : timeView === 'quarterly' ? 'quarters' : 'years'}</div>
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
                     <div className="text-sm font-medium text-purple-800 dark:text-purple-400">Active Events</div>
@@ -455,8 +466,8 @@ const CausalAnalysis = ({ onNavigate }) => {
                     <div className="text-sm font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
                     <div className="text-2xl font-bold text-orange-900 dark:text-orange-300 mt-1">
                       {(() => {
-                        const totalPredicted = displayData.reduce((sum, d) => sum + (d.predicted || 0), 0);
-                        const totalBaseline = displayData.reduce((sum, d) => sum + (d.baseline || 0), 0);
+                        const totalPredicted = forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0);
+                        const totalBaseline = forecastData.reduce((sum, d) => sum + (d.baseline || 0), 0);
                         const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
                         return (impact > 0 ? '+' : '') + impact.toFixed(1);
                       })()}%
@@ -467,93 +478,172 @@ const CausalAnalysis = ({ onNavigate }) => {
               )}
             </Card>
 
-            {displayData.filter(d => d.actual !== null).length > 0 && (
+            {displayData.length > 0 && forecastData.length > 0 && (
               <Card className="p-6">
                 <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Historical Sales Data</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Actual sales performance - {displayData.filter(d => d.actual !== null).length} data points</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">2. Forecast with Event Impact Breakdown</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Detailed view of how each event affects the forecast</p>
                 </div>
-                <div style={{ height: 400 }}>
+                {causalEvents.length === 0 ? (
+                  <>
+                    <div style={{ height: 420 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                          <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} interval={timeView === 'daily' && forecastData.length > 50 ? Math.floor(forecastData.length / 30) : 0} />
+                          <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
+                          {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                            <>
+                              <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
+                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} name="Baseline Forecast" />
+                            </>
+                          ) : (
+                            <>
+                              <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline Forecast" connectNulls={true} />
+                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Baseline Forecast" connectNulls={true} />
+                            </>
+                          )}
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="mt-6 text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
+                      <Gift className="w-12 h-12 mx-auto mb-3 opacity-50 text-gray-400" />
+                      <p className="font-medium text-gray-700 dark:text-gray-300">No causal events added yet</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Add events above to see their impact breakdown on the forecast</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ height: 420 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                          <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} interval={timeView === 'daily' && forecastData.length > 50 ? Math.floor(forecastData.length / 30) : 0} />
+                          <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
+                          {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                            <>
+                              <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
+                              {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                                const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                                return <Bar key={eventName} dataKey={eventName} stackId="events" fill={color} fillOpacity={0.8} name={eventName.split('_').slice(0, -1).join(' ')} radius={idx === scenarioGraph.eventNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />;
+                              })}
+                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} name="Total Predicted" />
+                            </>
+                          ) : (
+                            <>
+                              <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline Forecast" connectNulls={true} />
+                              {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                                const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                                return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={eventName.split('_').slice(0, -1).join(' ')} connectNulls={true} />;
+                              })}
+                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Total Predicted" connectNulls={true} />
+                            </>
+                          )}
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {causalEvents.map((event) => {
+                        const eventKey = `${event.typeLabel}_${event.id}`;
+                        const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
+                        const Icon = event.icon;
+                        return (
+                          <div key={event.id} className="p-3 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <Icon className="w-4 h-4" style={{ color: event.color }} />
+                              <span className="text-xs font-semibold text-gray-900 dark:text-white">{event.typeLabel}</span>
+                            </div>
+                            <div className="text-lg font-bold" style={{ color: event.color }}>
+                              {totalImpact > 0 ? '+' : ''}{Math.round(totalImpact).toLocaleString()}
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">cumulative impact</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </Card>
+            )}
+
+            {displayData.length > 0 && displayData.some(d => d.actual !== null) && (
+              <Card className="p-6">
+                <div className="mb-6">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">3. Historical Sales Analysis</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Actual sales performance and trends over time</p>
+                </div>
+                <div style={{ height: 420 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
-                      <defs>
-                        <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 0 : -35} textAnchor={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 'middle' : 'end'} height={60} interval={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 0 : Math.floor(displayData.filter(d => d.actual !== null).length / 15) || 0} />
+                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} />
                       <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ paddingTop: '20px' }} iconType={timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? 'rect' : 'line'} />
-                      {timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly' ? (
+                      <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                         <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
                       ) : (
                         <>
-                          <Area type="monotone" dataKey="actual" fill="url(#colorActual)" stroke="none" />
-                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} dot={{ fill: '#10B981', r: 3, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 2 }} name="Actual Sales" />
+                          <defs>
+                            <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                            </linearGradient>
+                          </defs>
+                          <Area type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} fill="url(#colorActual)" name="Actual Sales" />
+                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={0} dot={{ fill: '#10B981', r: 4 }} activeDot={{ r: 6 }} />
                         </>
                       )}
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
-              </Card>
-            )}
-
-            {displayData.filter(d => d.predicted !== null || d.baseline !== null).length > 0 && (
-              <Card className="p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Forecast with Event Impact</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Future predictions showing baseline vs event-adjusted forecast</p>
-                </div>
-                <div style={{ height: 400 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={displayData.filter(d => d.predicted !== null || d.baseline !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
-                      <defs>
-                        <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={theme.chart} stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor={theme.chart} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-35} textAnchor="end" height={60} interval={Math.floor(displayData.filter(d => d.predicted !== null).length / 15) || 0} />
-                      <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
-                      <Area type="monotone" dataKey="upper" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Upper Confidence" />
-                      <Area type="monotone" dataKey="lower" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Lower Confidence" />
-                      <Area type="monotone" dataKey="predicted" fill="url(#colorPredicted)" stroke="none" />
-                      <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2.5} strokeDasharray="8 4" dot={false} name="Baseline (No Events)" />
-                      <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3.5} dot={{ fill: theme.chart, r: 3, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 2 }} name="Predicted with Events" />
-                      {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                        const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                        return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={`${eventName.split('_').slice(0, -1).join(' ')} Impact`} />;
-                      })}
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-            )}
-
-            {decisions.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Decisions & Recommendations</h3>
-                <div className="space-y-3">
-                  {decisions.map((d, i) => (
-                    <div key={i} className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-gray-200 dark:border-gray-600">
-                      <div className="flex items-start space-x-3">
-                        <div className="p-2 rounded-lg mt-1" style={{ backgroundColor: theme.chart + '20' }}>
-                          <TrendingUp className="w-5 h-5" style={{ color: theme.chart }} />
+                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {(() => {
+                    const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
+                    const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
+                    const avgSales = historicalData.length > 0 ? totalSales / historicalData.length : 0;
+                    const maxSales = historicalData.length > 0 ? Math.max(...historicalData.map(d => d.actual)) : 0;
+                    
+                    let growthRate = 0;
+                    if (historicalData.length >= 2) {
+                      const firstHalf = historicalData.slice(0, Math.floor(historicalData.length / 2));
+                      const secondHalf = historicalData.slice(Math.floor(historicalData.length / 2));
+                      const firstAvg = firstHalf.reduce((s, d) => s + d.actual, 0) / firstHalf.length;
+                      const secondAvg = secondHalf.reduce((s, d) => s + d.actual, 0) / secondHalf.length;
+                      growthRate = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg * 100) : 0;
+                    }
+                    
+                    return (
+                      <>
+                        <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                          <div className="text-sm font-medium text-green-800 dark:text-green-400">Total Sales</div>
+                          <div className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{Math.round(totalSales).toLocaleString()}</div>
+                          <div className="text-xs text-green-700 dark:text-green-400 mt-2">{historicalData.length} periods</div>
                         </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-semibold text-gray-900 dark:text-white">{d.scenario}</div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">{d.advice}</div>
-                          <div className="text-xs font-medium mt-2" style={{ color: theme.chart }}>Expected Change: {d.avg_change_pct > 0 ? '+' : ''}{d.avg_change_pct.toFixed(1)}%</div>
+                        <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                          <div className="text-sm font-medium text-blue-800 dark:text-blue-400">Average Sales</div>
+                          <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{Math.round(avgSales).toLocaleString()}</div>
+                          <div className="text-xs text-blue-700 dark:text-blue-400 mt-2">per {timeView === 'daily' ? 'day' : timeView === 'weekly' ? 'week' : timeView === 'monthly' ? 'month' : timeView === 'quarterly' ? 'quarter' : 'year'}</div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
+                        <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                          <div className="text-sm font-medium text-purple-800 dark:text-purple-400">Peak Sales</div>
+                          <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">{Math.round(maxSales).toLocaleString()}</div>
+                          <div className="text-xs text-purple-700 dark:text-purple-400 mt-2">highest period</div>
+                        </div>
+                        <div className={`p-4 rounded-xl border ${growthRate >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-800'}`}>
+                          <div className={`text-sm font-medium ${growthRate >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-orange-800 dark:text-orange-400'}`}>Growth Rate</div>
+                          <div className={`text-2xl font-bold mt-1 ${growthRate >= 0 ? 'text-emerald-900 dark:text-emerald-300' : 'text-orange-900 dark:text-orange-300'}`}>
+                            {growthRate > 0 ? '+' : ''}{growthRate.toFixed(1)}%
+                          </div>
+                          <div className={`text-xs mt-2 ${growthRate >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-orange-700 dark:text-orange-400'}`}>period over period</div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </Card>
             )}

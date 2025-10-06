@@ -149,7 +149,7 @@ const Login = ({ onNavigate }) => {
       localStorage.removeItem("loginLockout");
       
       setSuccess("Login successful!");
-      setTimeout(() => onNavigate("home"), 1000);
+      setTimeout(() => onNavigate("home"), 500);
     } catch (err) {
       console.error("Login error:", err);
       setError(getErrorMessage(err.code));

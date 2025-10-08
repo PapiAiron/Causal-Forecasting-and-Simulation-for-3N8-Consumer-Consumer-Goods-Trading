@@ -5,13 +5,16 @@ python -m pip freeze > requirements.txt
 
 #react requirements
 npm install
+npm install firebase
 npm install react-router-dom recharts lucide-react
  npm install recharts lucide-react
    npm install -D tailwindcss postcss autoprefixer
    npx tailwindcss init -p
 
-
-#f
+ dd
+ #ascending
+ 
+#fd
 Ruun
 #BACKEND
 cd backend

@@ -26,12 +26,7 @@ const Overview = ({ onNavigate }) => {
     { month: 'Jun', actual: 188, predicted: 185, causal: 187 }
   ];
 
-  const kpiData = [
-    { name: 'Forecast Accuracy', value: 92.5, unit: '%', target: 90 },
-    { name: 'Inventory Turnover', value: 6.8, unit: '', target: 7 },
-    { name: 'On-Time Delivery', value: 98.2, unit: '%', target: 98 },
-    { name: 'Stockout Rate', value: 1.5, unit: '%', target: 2 },
-  ];
+
 
   const inventoryData = [
     { product: 'Product A', current: 1200, optimal: 1000, status: 'high' },
@@ -85,11 +80,7 @@ const Overview = ({ onNavigate }) => {
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {kpiData.map((kpi, index) => (
-                <KPICard key={index} {...kpi} />
-              ))}
-            </div>
+            
 
             <Card className="p-6">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">

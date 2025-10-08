@@ -12,10 +12,10 @@ import {
   X,
   ChevronDown,
   Home,
-  Moon,
-  Sun,
-  Palette,
-  Search
+  Search,
+  Info,
+  UserPlus,
+  Calendar
 } from 'lucide-react';
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
@@ -33,7 +33,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
 
   return (
     <>
-      {/* Backdrop Overlay */}
       {isOpen && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300"
@@ -41,12 +40,10 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
         />
       )}
       
-      {/* Sidebar - Slides in from left */}
       <div className={`fixed left-0 top-0 h-full bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-700/50 z-50 transition-all duration-300 ease-out shadow-2xl ${
         isOpen ? 'w-80 translate-x-0' : 'w-80 -translate-x-full'
       }`}>
         
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200/30 dark:border-gray-700/30">
           <div className="flex items-center space-x-3">
             <img 
@@ -56,7 +53,7 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
             />
             <div>
               <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                3N8 Analytics Platform
+                3N8 Analytics
               </span>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Analytics Platform</p>
             </div>
@@ -69,7 +66,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </button>
         </div>
 
-        {/* Search Bar */}
         <div className="p-6 pb-4">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -82,7 +78,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </div>
         </div>
 
-        {/* Navigation */}
         <div className="flex-1 px-6 py-2">
           <nav className="space-y-2">
             {navigationItems.map((item) => {
@@ -114,7 +109,6 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </nav>
         </div>
 
-        {/* Bottom Section */}
         <div className="p-6 border-t border-gray-200/30 dark:border-gray-700/30">
           <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl">
             <div 
@@ -135,31 +129,16 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
   );
 };
 
-// Modern Profile Component
-const ProfileDropdown = () => {
+const ProfileDropdown = ({ onNavigate }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const { theme, darkMode, colorTheme, toggleDarkMode, setColorTheme } = useTheme();
+  const { theme } = useTheme();
 
-  const handleDarkModeToggle = () => {
-    toggleDarkMode();
+  const handleNavigation = (page) => {
+    if (onNavigate) {
+      onNavigate(page);
+    }
+    setIsProfileOpen(false);
   };
-
-  const handleColorThemeChange = (themeKey) => {
-    setColorTheme(themeKey);
-  };
-
-  const colorThemes = [
-    { key: 'blue', name: 'Ocean Blue', hex: '#3B82F6' },
-    { key: 'purple', name: 'Royal Purple', hex: '#A855F7' },
-    { key: 'emerald', name: 'Emerald Green', hex: '#10B981' },
-    { key: 'orange', name: 'Sunset Orange', hex: '#F97316' },
-    { key: 'rose', name: 'Rose Pink', hex: '#F43F5E' },
-    { key: 'indigo', name: 'Deep Indigo', hex: '#6366F1' },
-    { key: 'cyan', name: 'Bright Cyan', hex: '#06B6D4' },
-    { key: 'amber', name: 'Golden Amber', hex: '#F59E0B' },
-    { key: 'teal', name: 'Ocean Teal', hex: '#14B8A6' },
-    { key: 'pink', name: 'Hot Pink', hex: '#EC4899' }
-  ];
 
   return (
     <div className="relative">
@@ -183,17 +162,14 @@ const ProfileDropdown = () => {
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Modern Profile dropdown */}
       {isProfileOpen && (
         <>
-          {/* Click outside overlay */}
           <div
             className="fixed inset-0 z-40"
             onClick={() => setIsProfileOpen(false)}
           />
           
           <div className="absolute right-0 top-full mt-3 w-80 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 z-50 overflow-hidden">
-            {/* Profile info */}
             <div className="px-6 py-5 border-b border-gray-200/30 dark:border-gray-700/30">
               <div className="flex items-center space-x-4">
                 <div 
@@ -215,17 +191,16 @@ const ProfileDropdown = () => {
               </div>
             </div>
 
-            
-
-            {/* Profile menu items */}
             <div className="py-2">
               {[
-                { icon: User, label: 'View Profile' },
-                { icon: Settings, label: 'Account Settings' },
-                { icon: HelpCircle, label: 'Help & Support' }
+                { icon: User, label: 'View Profile', action: 'profile' },
+                { icon: Settings, label: 'Account Settings', action: 'accountsettings' },
+                { icon: HelpCircle, label: 'Help & Support', action: 'support' },
+                { icon: Info, label: 'About Us', action: 'about' }
               ].map((item, index) => (
                 <button 
-                  key={index} 
+                  key={index}
+                  onClick={() => handleNavigation(item.action)}
                   className="flex items-center space-x-3 px-6 py-3 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100/70 dark:hover:bg-gray-700/70 transition-all duration-200 w-full text-left group hover:text-gray-900 dark:hover:text-white"
                 >
                   <item.icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -235,10 +210,24 @@ const ProfileDropdown = () => {
             </div>
 
             <div className="border-t border-gray-200/30 dark:border-gray-700/30">
-              <button className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 w-full text-left group">
+              <button 
+                onClick={() => {
+                  // 🔹 Clear auth (adjust to your auth method)
+                  localStorage.removeItem("authToken");
+                  sessionStorage.clear();
+
+                  // 🔹 Optionally call backend logout endpoint
+                  // await fetch('/api/logout', { method: 'POST' });
+
+                  // 🔹 Navigate to login
+                  handleNavigation("login");
+                }}
+                className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 w-full text-left group"
+              >
                 <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-medium">Sign Out</span>
               </button>
+
             </div>
           </div>
         </>
@@ -247,8 +236,7 @@ const ProfileDropdown = () => {
   );
 };
 
-// Modern Top Bar Component
-const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
+const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
   const [notifications] = useState(3);
   const { theme } = useTheme();
 
@@ -256,7 +244,6 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
     <header className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 z-30">
       <div className="max-w-full mx-auto px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between relative">
-          {/* Left side - Hamburger */}
           <div className="flex items-center">
             <button
               onClick={onSidebarToggle}
@@ -266,7 +253,6 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
             </button>
           </div>
 
-          {/* Center - App Title */}
           <div className="flex items-center space-x-3">
             <img 
               src="3N8.png" 
@@ -275,15 +261,13 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
             />
             <div>
               <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                3N8 Analytics Platform
+                3N8 Analytics
               </span>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Analytics Platform</p>
             </div>
           </div>
 
-          {/* Right side - Notifications + Profile */}
           <div className="flex items-center space-x-2 sm:space-x-4">
-            {/* Notifications */}
             <button className="relative p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 rounded-xl sm:rounded-2xl hover:bg-gray-100/70 dark:hover:bg-gray-800/70 hover:scale-105 active:scale-95 hidden xs:block">
               <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
               {notifications > 0 && (
@@ -296,7 +280,7 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
               )}
             </button>
             
-            <ProfileDropdown />
+            <ProfileDropdown onNavigate={onNavigate} />
           </div>
         </div>
       </div>
@@ -304,7 +288,6 @@ const TopBar = ({ sidebarOpen, onSidebarToggle }) => {
   );
 };
 
-// Dashboard Content Component
 const DashboardContent = ({ onNavigate }) => {
   const { theme } = useTheme();
 
@@ -332,12 +315,7 @@ const DashboardContent = ({ onNavigate }) => {
     }
   ];
 
-  const quickStats = [
-    { label: 'Total Products', value: '248', change: '+12%', positive: true },
-    { label: 'Active Simulations', value: '3', change: '+1', positive: true },
-    { label: 'Forecast Accuracy', value: '92.5%', change: '+2.3%', positive: true },
-    { label: 'System Uptime', value: '99.8%', change: '0%', positive: true }
-  ];
+
 
   return (
     <div className="pt-24">
@@ -348,25 +326,7 @@ const DashboardContent = ({ onNavigate }) => {
       />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {quickStats.map((stat, index) => (
-            <Card key={index} className="p-6 hover:shadow-lg transition-all duration-200">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{stat.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
-                </div>
-                <span className={`text-sm font-medium px-2 py-1 rounded-full ${
-                  stat.positive 
-                    ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400' 
-                    : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400'
-                }`}>
-                  {stat.change}
-                </span>
-              </div>
-            </Card>
-          ))}
-        </div>
+        
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {dashboardCards.map((card) => {
@@ -461,7 +421,6 @@ const DashboardContent = ({ onNavigate }) => {
   );
 };
 
-// Modern Layout Wrapper Component
 const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
   const [activeTab, setActiveTab] = useState(currentPage || 'home');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -497,6 +456,7 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
         <TopBar 
           sidebarOpen={sidebarOpen} 
           onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
+          onNavigate={onNavigate}
         />
         <main className="w-full">
           {children}
@@ -506,7 +466,6 @@ const LayoutWrapper = ({ children, currentPage, onNavigate }) => {
   );
 };
 
-// Main Dashboard Component
 const DashboardHome = ({ onNavigate = () => {} }) => {
   return (
     <LayoutWrapper currentPage="home" onNavigate={onNavigate}>

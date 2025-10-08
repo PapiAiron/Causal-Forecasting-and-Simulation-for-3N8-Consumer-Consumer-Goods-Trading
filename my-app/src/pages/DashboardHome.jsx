@@ -194,7 +194,7 @@ const ProfileDropdown = ({ onNavigate }) => {
             <div className="py-2">
               {[
                 { icon: User, label: 'View Profile', action: 'profile' },
-                { icon: Settings, label: 'Account Settings', action: 'accountsettings' },
+                // { icon: Settings, label: 'Account Settings', action: 'accountsettings' },
                 { icon: HelpCircle, label: 'Help & Support', action: 'support' },
                 { icon: Info, label: 'About Us', action: 'about' }
               ].map((item, index) => (

@@ -11,11 +11,7 @@ npm install react-router-dom recharts lucide-react
    npm install -D tailwindcss postcss autoprefixer
    npx tailwindcss init -p
 
- dd
- #ascendingg
- 
-#fd
-Ruun
+
 #BACKEND
 cd backend
 venv/Scripts/activate # or source venv/Scripts/activate

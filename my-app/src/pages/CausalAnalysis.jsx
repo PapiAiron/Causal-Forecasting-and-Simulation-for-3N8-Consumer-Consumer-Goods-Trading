@@ -291,12 +291,12 @@ const CausalAnalysis = ({ onNavigate }) => {
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Upload historical sales data (CSV format)</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
                 </div>
                 <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
                   <Upload size={18} />
-                  <span>{isLoading ? 'Processing...' : 'Upload CSV'}</span>
-                  <input type="file" accept=".csv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
+                  <span>{isLoading ? 'Processing...' : 'Upload'}</span>
+                  <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
                 </label>
               </div>
               {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}

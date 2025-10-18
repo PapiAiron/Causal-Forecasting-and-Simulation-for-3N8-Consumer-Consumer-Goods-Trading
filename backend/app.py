@@ -5,6 +5,9 @@ import numpy as np
 import joblib
 import calendar
 import os
+from prophet import Prophet
+from prophet.diagnostics import cross_validation, performance_metrics
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 app = Flask(__name__)
 CORS(app)
@@ -14,29 +17,32 @@ SAVED_MODEL = None
 if os.path.exists(MODEL_PATH):
     try:
         SAVED_MODEL = joblib.load(MODEL_PATH)
+        print("✓ Pre-trained model loaded successfully")
     except Exception as e:
         print(f"Error loading model: {e}")
         SAVED_MODEL = None
 
 
 def parse_num_series(s, index=None):
+    """Parse numeric series from various formats"""
     if s is None:
         return pd.Series(dtype=float, index=index)
     if isinstance(s, pd.Series):
         return pd.to_numeric(
-            s.astype(str).str.replace(r'[,\£\$]', '', regex=True)
+            s.astype(str).str.replace(r'[,\£\$₱€¥₩]', '', regex=True)
              .str.replace(r'\s+', '', regex=True)
              .str.strip(), errors='coerce'
         )
     return pd.to_numeric(
         pd.Series(s, index=index).astype(str)
-         .str.replace(r'[,\£\$]', '', regex=True)
+         .str.replace(r'[,\£\$₱€¥₩]', '', regex=True)
          .str.replace(r'\s+', '', regex=True)
          .str.strip(), errors='coerce'
     )
 
 
 def detect_date_column(df):
+    """Auto-detect date column from DataFrame"""
     best_col, best_score = None, -1
     for col in df.columns:
         sample = df[col].dropna().astype(str).head(200)
@@ -49,51 +55,321 @@ def detect_date_column(df):
     return best_col
 
 
-def clean_outliers(df, column='y'):
-    """Remove extreme outliers using IQR method"""
-    if df.empty or column not in df.columns:
-        return df
+def detect_format_and_process(df):
+    """
+    Detect CSV format and process accordingly
+    Handles: Standard format and Wide format (Date-Outlet-SKUs)
+    """
+    # Clean column names
+    df.columns = [str(c).strip() for c in df.columns]
+    col_lower = [c.lower() for c in df.columns]
     
-    original_count = len(df)
-    Q1 = df[column].quantile(0.25)
-    Q3 = df[column].quantile(0.75)
-    IQR = Q3 - Q1
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
-    df = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+    # Check for wide format
+    has_outlet = any('outlet' in c for c in col_lower)
+    has_multiple_cols = len(df.columns) > 5
     
-    removed = original_count - len(df)
-    if removed > 0:
-        print(f"Removed {removed} outliers ({removed/original_count*100:.1f}%)")
-    
-    return df
+    if has_outlet and has_multiple_cols:
+        # Wide format processing
+        return process_wide_format(df)
+    else:
+        # Standard format processing
+        return process_standard_format(df)
 
 
-def fill_missing_dates(df, date_col='ds', value_col='y'):
-    """Fill missing dates with interpolated values"""
-    if df.empty:
-        return df
+def process_wide_format(df):
+    """
+    Convert wide format (Date, Outlet, SKU1, SKU2, ...) to (ds, y)
+    """
+    print("Processing WIDE format (Date-Outlet-SKUs)")
     
-    date_range = pd.date_range(start=df[date_col].min(), end=df[date_col].max(), freq='D')
-    df_complete = df.set_index(date_col).reindex(date_range)
-    df_complete[value_col] = df_complete[value_col].interpolate(method='linear', limit_direction='both')
-    df_complete[value_col] = df_complete[value_col].fillna(method='ffill').fillna(method='bfill')
-    df_complete = df_complete.reset_index()
-    df_complete.columns = [date_col, value_col]
+    # Find date column
+    date_col = None
+    for col in df.columns:
+        if col.lower().strip() in ['date', 'datetime', 'ds', 'day']:
+            date_col = col
+            break
     
-    filled = len(date_range) - len(df)
-    if filled > 0:
-        print(f"Filled {filled} missing dates ({len(df)} to {len(date_range)} days)")
+    if date_col is None:
+        date_col = detect_date_column(df)
     
-    return df_complete
+    if date_col is None:
+        raise ValueError("No date column found")
+    
+    # Find outlet column
+    outlet_col = None
+    for col in df.columns:
+        if 'outlet' in col.lower():
+            outlet_col = col
+            break
+    
+    # Identify SKU columns
+    non_sku_cols = [date_col]
+    if outlet_col:
+        non_sku_cols.append(outlet_col)
+    
+    sku_cols = [col for col in df.columns if col not in non_sku_cols]
+    
+    # Parse date
+    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+    df = df.dropna(subset=[date_col])
+    
+    # Convert SKU columns to numeric and sum
+    for col in sku_cols:
+        df[col] = parse_num_series(df[col])
+    
+    df['total'] = df[sku_cols].sum(axis=1)
+    
+    # Group by date
+    result = df.groupby(date_col)['total'].sum().reset_index()
+    result.columns = ['ds', 'y']
+    
+    print(f"✓ Converted wide format: {len(result)} daily observations")
+    return result
 
 
-def smooth_series(series, window=7):
-    """Apply moving average smoothing"""
-    return series.rolling(window=window, center=True, min_periods=1).mean()
+def process_standard_format(df):
+    """
+    Process standard format (Date, SKU/Value columns)
+    """
+    print("Processing STANDARD format")
+    
+    # Normalize column names
+    df.columns = [c.lower().strip() for c in df.columns]
+    
+    # Find date column
+    date_col = None
+    for cand in ["date", "ds", "datetime", "day", "timestamp"]:
+        if cand in df.columns:
+            date_col = cand
+            break
+    
+    if date_col is None:
+        date_col = detect_date_column(df)
+    
+    if date_col is None:
+        raise ValueError("No date column found")
+    
+    # Rename to 'ds'
+    if date_col != 'ds':
+        df.rename(columns={date_col: 'ds'}, inplace=True)
+    
+    # Parse dates
+    df['ds'] = pd.to_datetime(df['ds'], errors='coerce')
+    df = df.dropna(subset=['ds'])
+    
+    # Find value columns
+    value_cols = []
+    for col in ['sku', 'value', 'sales', 'quantity', 'demand', 'revenue']:
+        if col in df.columns:
+            value_cols.append(col)
+    
+    if not value_cols:
+        # Try all numeric columns
+        for col in df.columns:
+            if col != 'ds':
+                parsed = parse_num_series(df[col])
+                if parsed.sum() > 0:
+                    value_cols.append(col)
+                    break
+    
+    if not value_cols:
+        raise ValueError("No value column found")
+    
+    # Aggregate
+    df['y'] = 0
+    for col in value_cols:
+        df['y'] += parse_num_series(df[col])
+    
+    # Group by date
+    result = df.groupby('ds')['y'].sum().reset_index()
+    
+    print(f"✓ Processed standard format: {len(result)} daily observations")
+    return result
+
+
+def calculate_metrics(y_true, y_pred):
+    """
+    Calculate comprehensive evaluation metrics
+    """
+    mask = ~(np.isnan(y_true) | np.isnan(y_pred))
+    y_true_clean = np.array(y_true)[mask]
+    y_pred_clean = np.array(y_pred)[mask]
+    
+    if len(y_true_clean) == 0:
+        return {'mae': 0, 'rmse': 0, 'mape': 0, 'r2': 0, 'accuracy': 0, 'bias': 0}
+    
+    mae = mean_absolute_error(y_true_clean, y_pred_clean)
+    rmse = np.sqrt(mean_squared_error(y_true_clean, y_pred_clean))
+    
+    mape_values = np.abs((y_true_clean - y_pred_clean) / y_true_clean)
+    mape = np.mean(mape_values[np.isfinite(mape_values)]) * 100
+    
+    r2 = r2_score(y_true_clean, y_pred_clean)
+    accuracy = max(0, 100 - mape)
+    bias = np.mean(y_pred_clean - y_true_clean) / np.mean(y_true_clean) * 100
+    
+    return {
+        'mae': round(float(mae), 2),
+        'rmse': round(float(rmse), 2),
+        'mape': round(float(mape), 2),
+        'r2': round(float(r2), 4),
+        'accuracy': round(float(accuracy), 2),
+        'bias': round(float(bias), 2)
+    }
+
+
+def get_optimized_prophet_params(df, target_col='y'):
+    """
+    Determine optimal Prophet parameters based on data characteristics
+    """
+    data_std = df[target_col].std()
+    data_mean = df[target_col].mean()
+    cv = data_std / data_mean if data_mean > 0 else 0
+    
+    print(f"\n{'='*60}")
+    print(f"DATA ANALYSIS FOR PARAMETER OPTIMIZATION")
+    print(f"{'='*60}")
+    print(f"Mean: {data_mean:.2f}")
+    print(f"Std Dev: {data_std:.2f}")
+    print(f"Coefficient of Variation: {cv:.2%}")
+    
+    if cv > 0.5:
+        print("→ High volatility detected: Using flexible parameters")
+        params = {
+            'seasonality_mode': 'multiplicative',
+            'changepoint_prior_scale': 0.5,
+            'seasonality_prior_scale': 10.0,
+            'changepoint_range': 0.9,
+            'yearly_seasonality': True,
+            'weekly_seasonality': True,
+            'daily_seasonality': False,
+            'interval_width': 0.95
+        }
+    elif cv > 0.3:
+        print("→ Moderate volatility: Using balanced parameters")
+        params = {
+            'seasonality_mode': 'multiplicative',
+            'changepoint_prior_scale': 0.3,
+            'seasonality_prior_scale': 5.0,
+            'changepoint_range': 0.85,
+            'yearly_seasonality': True,
+            'weekly_seasonality': True,
+            'daily_seasonality': False,
+            'interval_width': 0.90
+        }
+    else:
+        print("→ Low volatility: Using conservative parameters")
+        params = {
+            'seasonality_mode': 'additive',
+            'changepoint_prior_scale': 0.1,
+            'seasonality_prior_scale': 2.0,
+            'changepoint_range': 0.8,
+            'yearly_seasonality': True,
+            'weekly_seasonality': True,
+            'daily_seasonality': False,
+            'interval_width': 0.85
+        }
+    
+    print(f"{'='*60}\n")
+    return params
+
+
+def evaluate_model_performance(prophet_df, model, forecast_result):
+    """
+    Comprehensive model evaluation with multiple metrics
+    """
+    print(f"\n{'='*60}")
+    print("MODEL PERFORMANCE EVALUATION")
+    print(f"{'='*60}")
+    
+    hist_forecast = forecast_result[forecast_result['ds'] <= prophet_df['ds'].max()].copy()
+    hist_forecast = hist_forecast.merge(prophet_df, on='ds', how='left')
+    valid_data = hist_forecast.dropna(subset=['y', 'yhat'])
+    
+    evaluation_results = {}
+    
+    if len(valid_data) > 10:
+        in_sample_metrics = calculate_metrics(
+            valid_data['y'].values,
+            valid_data['yhat'].values
+        )
+        
+        print("\nIN-SAMPLE METRICS (Historical Fit):")
+        print(f"  MAE:      {in_sample_metrics['mae']:>10,.2f} units")
+        print(f"  RMSE:     {in_sample_metrics['rmse']:>10,.2f} units")
+        print(f"  MAPE:     {in_sample_metrics['mape']:>10.2f}%")
+        print(f"  Accuracy: {in_sample_metrics['accuracy']:>10.2f}%")
+        print(f"  R²:       {in_sample_metrics['r2']:>10.4f}")
+        print(f"  Bias:     {in_sample_metrics['bias']:>+10.2f}%")
+        
+        print("\nPERFORMANCE ASSESSMENT:")
+        if in_sample_metrics['accuracy'] >= 90:
+            print("  ✓ EXCELLENT - Model fits historical data very well")
+        elif in_sample_metrics['accuracy'] >= 80:
+            print("  ✓ GOOD - Model is reliable for forecasting")
+        elif in_sample_metrics['accuracy'] >= 70:
+            print("  ⚠ FAIR - Model may need tuning")
+        else:
+            print("  ✗ POOR - Consider data preprocessing or different parameters")
+        
+        if abs(in_sample_metrics['bias']) < 5:
+            print("  ✓ Unbiased forecasts")
+        elif in_sample_metrics['bias'] > 5:
+            print(f"  ⚠ Over-forecasting by {in_sample_metrics['bias']:.1f}%")
+        else:
+            print(f"  ⚠ Under-forecasting by {abs(in_sample_metrics['bias']):.1f}%")
+        
+        evaluation_results['in_sample'] = in_sample_metrics
+        
+        # Cross-validation
+        if len(prophet_df) >= 90:
+            try:
+                print("\nPerforming cross-validation...")
+                df_cv = cross_validation(
+                    model,
+                    initial='60 days',
+                    period='15 days',
+                    horizon='30 days',
+                    parallel=None
+                )
+                
+                cv_metrics = calculate_metrics(df_cv['y'].values, df_cv['yhat'].values)
+                
+                print("\nCROSS-VALIDATION METRICS (Out-of-sample):")
+                print(f"  MAE:      {cv_metrics['mae']:>10,.2f} units")
+                print(f"  RMSE:     {cv_metrics['rmse']:>10,.2f} units")
+                print(f"  MAPE:     {cv_metrics['mape']:>10.2f}%")
+                print(f"  Accuracy: {cv_metrics['accuracy']:>10.2f}%")
+                print(f"  R²:       {cv_metrics['r2']:>10.4f}")
+                
+                accuracy_drop = in_sample_metrics['accuracy'] - cv_metrics['accuracy']
+                print(f"\nOVERFITTING CHECK:")
+                print(f"  Accuracy drop: {accuracy_drop:+.2f}%")
+                if accuracy_drop < 5:
+                    print("  ✓ No overfitting detected")
+                elif accuracy_drop < 10:
+                    print("  ⚠ Slight overfitting")
+                else:
+                    print("  ✗ Significant overfitting - model may not generalize well")
+                
+                print(f"{'='*60}\n")
+                
+                evaluation_results['cross_validation'] = cv_metrics
+                evaluation_results['overfitting_check'] = {
+                    'accuracy_drop': round(float(accuracy_drop), 2),
+                    'status': 'good' if accuracy_drop < 5 else 'warning' if accuracy_drop < 10 else 'poor'
+                }
+            except Exception as e:
+                print(f"  Cross-validation skipped: {e}")
+        else:
+            print(f"\n  Note: Not enough data for cross-validation (need 90+ days, have {len(prophet_df)})")
+            print(f"{'='*60}\n")
+    
+    return evaluation_results if evaluation_results else {'in_sample': {'mae': 0, 'rmse': 0, 'mape': 0, 'r2': 0, 'accuracy': 0}}
 
 
 def format_mdy(ts):
+    """Format timestamp to M/D/Y format"""
     try:
         ts = pd.to_datetime(ts)
         return f"{ts.month}/{ts.day}/{ts.year}"
@@ -103,10 +379,10 @@ def format_mdy(ts):
 
 @app.route("/forecast", methods=["POST"])
 def forecast():
+    """
+    Enhanced forecast endpoint with automatic model evaluation and optimization
+    """
     try:
-        if SAVED_MODEL is None:
-            print("WARNING: No pre-trained model found, using fresh Prophet model")
-
         if "file" not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
 
@@ -114,180 +390,128 @@ def forecast():
         forecast_days = int(request.form.get("days", 30))
         forecast_days = max(30, min(forecast_days, 730))
         
+        # Load and clean data
         df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
-        df.columns = [c.strip() for c in df.columns]
-
+        
+        # Remove duplicate header rows
         if df.shape[1] >= 2:
             second_col = df.columns[1]
             mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
                          (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
             df = df.loc[~mask_header].reset_index(drop=True)
 
-        date_col_original = None
-        for cand in ["Date", "date", "DATE", "ds"]:
-            if cand in df.columns:
-                date_col_original = cand
-                break
+        # Detect format and process
+        prophet_df = detect_format_and_process(df)
         
-        if date_col_original is None:
-            date_col_original = detect_date_column(df)
-        
-        if date_col_original is None:
-            return jsonify({"error": "No date column found"}), 400
-
-        df.columns = [c.lower().strip() for c in df.columns]
-        date_col_lower = date_col_original.lower().strip()
-        if date_col_lower in df.columns and date_col_lower != "ds":
-            df.rename(columns={date_col_lower: "ds"}, inplace=True)
-
-        if "ds" not in df.columns:
-            return jsonify({"error": f"Failed to create 'ds' column"}), 400
-
-        df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
-        df["sku"] = parse_num_series(df.get("sku"), index=df.index)
-        df["value"] = parse_num_series(df.get("value"), index=df.index)
-
-        keep_mask = (~df["ds"].isna()) & (
-            (df["sku"].notna() & (df["sku"] > 0)) | 
-            (df["value"].notna() & (df["value"] > 0))
-        )
-        if keep_mask.sum() == 0:
-            keep_mask = (~df["ds"].isna())
-        
-        df = df.loc[keep_mask].copy()
-        
-        if df.empty:
+        if prophet_df.empty:
             return jsonify({"error": "No valid data after cleaning"}), 400
 
-        cols_for_dup = [c for c in ["ds", "outlet", "sku", "value"] if c in df.columns]
-        if cols_for_dup:
-            df = df.drop_duplicates(subset=cols_for_dup, keep="first")
+        # Remove duplicates and sort
+        prophet_df = prophet_df.drop_duplicates(subset=['ds'], keep='first')
+        prophet_df = prophet_df.sort_values('ds').reset_index(drop=True)
+        
+        # Data quality checks
+        print(f"\n{'='*60}")
+        print("DATA QUALITY REPORT")
+        print(f"{'='*60}")
+        print(f"Total records: {len(prophet_df)}")
+        print(f"Date range: {prophet_df['ds'].min().date()} to {prophet_df['ds'].max().date()}")
+        print(f"Time span: {(prophet_df['ds'].max() - prophet_df['ds'].min()).days} days")
+        print(f"\nTarget Variable Statistics:")
+        print(f"  Mean:     {prophet_df['y'].mean():>10.2f}")
+        print(f"  Median:   {prophet_df['y'].median():>10.2f}")
+        print(f"  Std Dev:  {prophet_df['y'].std():>10.2f}")
+        print(f"  Min:      {prophet_df['y'].min():>10.2f}")
+        print(f"  Max:      {prophet_df['y'].max():>10.2f}")
+        print(f"  Zeros:    {(prophet_df['y'] == 0).sum()} ({(prophet_df['y'] == 0).sum()/len(prophet_df)*100:.1f}%)")
+        print(f"{'='*60}\n")
+        
+        # Check for minimum data requirements
+        if len(prophet_df) < 30:
+            return jsonify({
+                "error": f"Insufficient data for forecasting. Need at least 30 days, got {len(prophet_df)}"
+            }), 400
 
-        df = df.sort_values("ds").reset_index(drop=True)
+        # Get optimized parameters
+        model_params = get_optimized_prophet_params(prophet_df)
 
-        agg_dict = {}
-        if "sku" in df.columns:
-            agg_dict["sku"] = "sum"
-        if "value" in df.columns:
-            agg_dict["value"] = "sum"
-        
-        if not agg_dict:
-            return jsonify({"error": "No numeric columns to aggregate"}), 400
-
-        df_agg = df.groupby("ds").agg(agg_dict).reset_index()
-        
-        if "sku" in df_agg.columns and df_agg["sku"].sum() > 0:
-            df_agg["y"] = df_agg["sku"]
-        else:
-            df_agg["y"] = df_agg.get("value", 0)
-
-        prophet_df = df_agg[["ds", "y"]].copy()
-        
-        print(f"\nDATA PROCESSING PIPELINE")
-        print(f"Raw data: {len(prophet_df)} points | Range: {prophet_df['ds'].min().date()} to {prophet_df['ds'].max().date()}")
-        print(f"Mean: {prophet_df['y'].mean():.0f} | Std: {prophet_df['y'].std():.0f}")
-        
-        prophet_df = clean_outliers(prophet_df, column='y')
-        
-        if len(prophet_df) < 10:
-            return jsonify({"error": f"Insufficient data after outlier removal. Need at least 10 points, got {len(prophet_df)}"}), 400
-        
-        prophet_df = fill_missing_dates(prophet_df, date_col='ds', value_col='y')
-        prophet_df['y'] = smooth_series(prophet_df['y'], window=3)
-        
-        print(f"Final training data: {len(prophet_df)} points\n")
-
-        from prophet import Prophet
-        
-        prophet_model = Prophet(
-            seasonality_mode='additive',
-            changepoint_prior_scale=0.05,
-            yearly_seasonality=True,
-            weekly_seasonality=True,
-            daily_seasonality=False,
-            interval_width=0.80,
-            seasonality_prior_scale=2.0,
-            changepoint_range=0.8
-        )
-                
-        prophet_model.add_seasonality(name='monthly', period=30.5, fourier_order=2)
-        
-        print("Training Prophet model...")
+        # Train Prophet model
+        print("Training Prophet model with optimized parameters...")
+        prophet_model = Prophet(**model_params)
+        prophet_model.add_seasonality(name='monthly', period=30.5, fourier_order=5)
         prophet_model.fit(prophet_df)
-        print("Model trained successfully!\n")
+        print("✓ Model training complete\n")
 
+        # Generate forecast
         future = prophet_model.make_future_dataframe(periods=forecast_days, freq='D')
         forecast_result = prophet_model.predict(future)
         
-        hist_mean = prophet_df['y'].mean()
-        hist_std = prophet_df['y'].std()
-        reasonable_upper = hist_mean + 1.5 * hist_std
-        reasonable_lower = max(0, hist_mean - 1.5 * hist_std)
-        
-        forecast_result['yhat'] = forecast_result['yhat'].clip(lower=reasonable_lower, upper=reasonable_upper)
-        forecast_result['yhat_lower'] = forecast_result['yhat_lower'].clip(lower=0, upper=reasonable_upper)
-        forecast_result['yhat_upper'] = forecast_result['yhat_upper'].clip(lower=0, upper=reasonable_upper)
-        
-        forecast_result['yhat'] = smooth_series(forecast_result['yhat'], window=3)
-        forecast_result['yhat_lower'] = smooth_series(forecast_result['yhat_lower'], window=3)
-        forecast_result['yhat_upper'] = smooth_series(forecast_result['yhat_upper'], window=3)
+        # Apply bounds
+        forecast_result['yhat'] = forecast_result['yhat'].clip(lower=0)
+        forecast_result['yhat_lower'] = forecast_result['yhat_lower'].clip(lower=0)
+        forecast_result['yhat_upper'] = forecast_result['yhat_upper'].clip(lower=0)
 
+        # Evaluate model performance
+        evaluation_results = evaluate_model_performance(prophet_df, prophet_model, forecast_result)
+
+        # Extract future forecast
         future_forecast = forecast_result[forecast_result['ds'] > prophet_df['ds'].max()].copy()
 
-        original_hist = df_agg[["ds", "y"]].copy()
-        historical_dates = original_hist['ds'].dt.strftime("%Y-%m-%d").tolist()
-        historical_values = original_hist['y'].tolist()
+        # Prepare response data
+        historical_dates = prophet_df['ds'].dt.strftime("%Y-%m-%d").tolist()
+        historical_values = prophet_df['y'].tolist()
         forecast_dates = future_forecast['ds'].dt.strftime("%Y-%m-%d").tolist()
         
-        forecast_values = [float(v) if pd.notna(v) else hist_mean for v in future_forecast['yhat'].tolist()]
-        forecast_lower = [float(v) if pd.notna(v) else reasonable_lower for v in future_forecast['yhat_lower'].tolist()]
-        forecast_upper = [float(v) if pd.notna(v) else reasonable_upper for v in future_forecast['yhat_upper'].tolist()]
+        forecast_values = [float(v) if pd.notna(v) else 0 for v in future_forecast['yhat'].tolist()]
+        forecast_lower = [float(v) if pd.notna(v) else 0 for v in future_forecast['yhat_lower'].tolist()]
+        forecast_upper = [float(v) if pd.notna(v) else 0 for v in future_forecast['yhat_upper'].tolist()]
         
         combined_dates = historical_dates + forecast_dates
         combined_actual = historical_values + [None] * len(forecast_dates)
-        combined_baseline = [None] * len(historical_dates) + forecast_values
         combined_predicted = [None] * len(historical_dates) + forecast_values
         combined_lower = [None] * len(historical_dates) + forecast_lower
         combined_upper = [None] * len(historical_dates) + forecast_upper
 
         graph_series = {
             "actual": combined_actual,
-            "baseline": combined_baseline,
+            "baseline": combined_predicted,
             "base": combined_predicted,
             "predicted": combined_predicted,
             "lower_bound": combined_lower,
             "upper_bound": combined_upper
         }
 
+        # Format forecast list
         forecast_list = []
         for _, row in future_forecast.iterrows():
-            yhat_val = float(row['yhat']) if pd.notna(row['yhat']) else hist_mean
-            lower_val = float(row['yhat_lower']) if pd.notna(row['yhat_lower']) else reasonable_lower
-            upper_val = float(row['yhat_upper']) if pd.notna(row['yhat_upper']) else reasonable_upper
-            
             forecast_list.append({
                 "ds": format_mdy(row['ds']),
-                "pred": yhat_val,
-                "pred_lower": lower_val,
-                "pred_upper": upper_val
+                "pred": max(0.0, float(row['yhat'])),
+                "pred_lower": max(0.0, float(row['yhat_lower'])),
+                "pred_upper": max(0.0, float(row['yhat_upper']))
             })
 
-        hist_forecast = forecast_result[forecast_result['ds'] <= prophet_df['ds'].max()].copy()
-        hist_forecast = hist_forecast.merge(prophet_df, on='ds', how='left')
-        valid_data = hist_forecast.dropna(subset=['y', 'yhat'])
-        
-        if len(valid_data) > 0:
-            mae = float(np.mean(np.abs(valid_data['y'] - valid_data['yhat'])))
-            rmse = float(np.sqrt(np.mean((valid_data['y'] - valid_data['yhat'])**2)))
-            mape_vals = np.abs((valid_data['y'] - valid_data['yhat']) / valid_data['y'])
-            mape = float(np.mean(mape_vals[np.isfinite(mape_vals)]) * 100) if np.any(np.isfinite(mape_vals)) else 0.0
-        else:
-            mae, rmse, mape = 0.0, 0.0, 0.0
+        # Generate insights
+        insights = generate_forecast_insights(
+            evaluation_results,
+            prophet_df,
+            future_forecast,
+            forecast_days
+        )
 
-        metrics = {"mae": mae, "rmse": rmse, "mape": mape}
+        # Final metrics
+        final_metrics = evaluation_results.get('in_sample', {})
+        
+        print(f"\n{'='*60}")
+        print("FORECAST GENERATION COMPLETE")
+        print(f"{'='*60}")
+        print(f"✓ Generated {forecast_days}-day forecast")
+        print(f"✓ Model accuracy: {final_metrics.get('accuracy', 0):.2f}%")
+        print(f"✓ Total forecast demand: {sum(forecast_values):,.0f} units")
+        print(f"{'='*60}\n")
 
         return jsonify({
-            "model_used": "prophet",
+            "model_used": "prophet_optimized",
             "forecast": forecast_list,
             "graph": {"dates": combined_dates, "series": graph_series},
             "scenario_results": {"base": forecast_values},
@@ -295,97 +519,142 @@ def forecast():
             "feature_importance": None,
             "monthly_total": float(sum(forecast_values)),
             "forecast_days": forecast_days,
-            "metrics": metrics
+            "metrics": final_metrics,
+            "evaluation": evaluation_results,
+            "insights": insights,
+            "model_params": model_params
         })
 
     except Exception as e:
         import traceback
-        print(f"\nERROR IN FORECAST")
+        print(f"\n{'='*60}")
+        print("ERROR IN FORECAST")
+        print(f"{'='*60}")
         print(f"{e}")
         print(traceback.format_exc())
+        print(f"{'='*60}\n")
         return jsonify({"error": str(e)}), 400
+
+
+def generate_forecast_insights(evaluation_results, historical_df, future_forecast, forecast_days):
+    """
+    Generate actionable insights from forecast evaluation
+    """
+    insights = []
+    
+    metrics = evaluation_results.get('in_sample', {})
+    accuracy = metrics.get('accuracy', 0)
+    bias = metrics.get('bias', 0)
+    
+    # Performance insight
+    if accuracy >= 90:
+        insights.append({
+            "type": "success",
+            "title": "Excellent Model Performance",
+            "message": f"Model achieved {accuracy:.1f}% accuracy on historical data. Forecasts are highly reliable."
+        })
+    elif accuracy >= 80:
+        insights.append({
+            "type": "info",
+            "title": "Good Model Performance",
+            "message": f"Model achieved {accuracy:.1f}% accuracy. Forecasts are reliable for planning purposes."
+        })
+    elif accuracy >= 70:
+        insights.append({
+            "type": "warning",
+            "title": "Fair Model Performance",
+            "message": f"Model achieved {accuracy:.1f}% accuracy. Consider reviewing data quality or adding more historical data."
+        })
+    else:
+        insights.append({
+            "type": "error",
+            "title": "Low Model Accuracy",
+            "message": f"Model accuracy is {accuracy:.1f}%. Review data quality, outliers, or consider alternative forecasting methods."
+        })
+    
+    # Bias insight
+    if abs(bias) > 10:
+        if bias > 0:
+            insights.append({
+                "type": "warning",
+                "title": "Over-forecasting Detected",
+                "message": f"Model tends to over-predict by {bias:.1f}%. Consider adjusting safety stock calculations accordingly."
+            })
+        else:
+            insights.append({
+                "type": "warning",
+                "title": "Under-forecasting Detected",
+                "message": f"Model tends to under-predict by {abs(bias):.1f}%. Increase buffer inventory to avoid stockouts."
+            })
+    
+    # Trend insight
+    hist_mean = historical_df['y'].mean()
+    forecast_mean = future_forecast['yhat'].mean()
+    trend_change = ((forecast_mean - hist_mean) / hist_mean) * 100
+    
+    if abs(trend_change) > 20:
+        if trend_change > 0:
+            insights.append({
+                "type": "info",
+                "title": "Increasing Demand Trend",
+                "message": f"Forecast indicates {trend_change:.1f}% increase in demand. Consider increasing inventory levels and supplier capacity."
+            })
+        else:
+            insights.append({
+                "type": "info",
+                "title": "Decreasing Demand Trend",
+                "message": f"Forecast indicates {abs(trend_change):.1f}% decrease in demand. Optimize inventory to reduce carrying costs."
+            })
+    
+    # Overfitting check
+    if 'cross_validation' in evaluation_results:
+        cv_metrics = evaluation_results['cross_validation']
+        cv_accuracy = cv_metrics.get('accuracy', 0)
+        if accuracy - cv_accuracy > 10:
+            insights.append({
+                "type": "warning",
+                "title": "Potential Overfitting",
+                "message": f"Model performs significantly better on training data ({accuracy:.1f}%) than validation data ({cv_accuracy:.1f}%). Use forecasts cautiously."
+            })
+    
+    return insights
 
 
 @app.route("/causal-analysis", methods=["POST"])
 def causal_analysis():
+    """Causal analysis endpoint"""
     try:
         if "file" not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
         
         file = request.files["file"]
         df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
-        df.columns = [c.strip() for c in df.columns]
         
+        # Clean and process
         if df.shape[1] >= 2:
             second_col = df.columns[1]
             mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
                          (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
             df = df.loc[~mask_header].reset_index(drop=True)
 
-        df.columns = [c.lower().strip() for c in df.columns]
-
-        date_col = None
-        for cand in ["date", "ds"]:
-            if cand in df.columns:
-                date_col = cand
-                break
+        prophet_df = detect_format_and_process(df)
         
-        if date_col is None:
-            date_col = detect_date_column(df)
-        
-        if date_col is None:
-            return jsonify({"error": "No date column found"}), 400
-        
-        if date_col != "ds":
-            df.rename(columns={date_col: "ds"}, inplace=True)
-
-        df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
-        df["sku"] = parse_num_series(df.get("sku"), index=df.index)
-        df["value"] = parse_num_series(df.get("value"), index=df.index)
-        
-        df = df.dropna(subset=["ds"]).reset_index(drop=True)
-
-        agg_cols = {}
-        if "sku" in df.columns:
-            agg_cols["sku"] = "sum"
-        if "value" in df.columns:
-            agg_cols["value"] = "sum"
-        
-        if not agg_cols:
+        if prophet_df.empty:
             return jsonify({"causal_factors": [], "seasonal_data": [], "daily_data": []})
 
-        df_agg = df.groupby("ds").agg(agg_cols).reset_index()
-        
-        if "sku" in df_agg.columns and df_agg["sku"].sum() > 0:
-            df_agg["y"] = df_agg["sku"]
-        else:
-            df_agg["y"] = df_agg.get("value", 0.0)
-
+        # Daily data
         daily_data = []
-        for _, row in df_agg.sort_values("ds").iterrows():
+        for _, row in prophet_df.sort_values("ds").iterrows():
             daily_data.append({
                 "date": row["ds"].strftime("%Y-%m-%d"),
                 "value": float(row["y"])
             })
 
-        causal_factors = []
-        for col in df_agg.columns:
-            if col in ("ds", "y"):
-                continue
-            try:
-                if pd.api.types.is_numeric_dtype(df_agg[col]):
-                    corr = abs(pd.to_numeric(df_agg[col], errors="coerce").corr(pd.to_numeric(df_agg["y"], errors="coerce")))
-                    if not pd.isna(corr):
-                        causal_factors.append({"factor": col, "correlation": float(corr)})
-            except:
-                continue
-
-        causal_factors = sorted(causal_factors, key=lambda x: x["correlation"], reverse=True)
-
+        # Seasonal data
         seasonal = []
-        df_agg["month"] = df_agg["ds"].dt.month
-        mg = df_agg.groupby("month")["y"].agg(["mean", "sum"]).reset_index()
-        overall_mean = df_agg["y"].mean() if not df_agg["y"].empty else 0
+        prophet_df["month"] = prophet_df["ds"].dt.month
+        mg = prophet_df.groupby("month")["y"].agg(["mean", "sum"]).reset_index()
+        overall_mean = prophet_df["y"].mean() if not prophet_df["y"].empty else 0
         
         for _, row in mg.iterrows():
             month = calendar.month_abbr[int(row["month"])]
@@ -396,7 +665,7 @@ def causal_analysis():
             })
 
         return jsonify({
-            "causal_factors": causal_factors,
+            "causal_factors": [],
             "seasonal_data": seasonal,
             "daily_data": daily_data
         })
@@ -410,10 +679,7 @@ def causal_analysis():
 
 @app.route("/simulate", methods=["POST"])
 def simulate():
-    """
-    Industry-standard continuous review inventory simulation with periodic replenishment.
-    Implements (Q, r) policy: Order quantity Q when inventory position reaches reorder point r.
-    """
+    """Inventory simulation endpoint"""
     try:
         data = request.json or {}
 
@@ -437,14 +703,12 @@ def simulate():
             except Exception:
                 return float(default)
 
-        # Extract user inputs
-        replenishment_qty = safe_int(data.get("stock", 1000))  # Daily replenishment quantity
+        replenishment_qty = safe_int(data.get("stock", 1000))
         lead_time = max(1, safe_int(data.get("lead_time", 1)))
         days = min(365, max(1, safe_int(data.get("days", 30))))
         scenario = (data.get("scenario") or "normal").lower()
         base_demand = safe_float(data.get("demand", 500.0))
 
-        # Scenario multipliers
         scenario_multiplier = {
             "normal": 1.0, 
             "promo": 1.3, 
@@ -452,42 +716,16 @@ def simulate():
             "economic_downturn": 0.8
         }.get(scenario, 1.0)
 
-        # Calculate average daily demand
         avg_daily_demand = int(round(base_demand * scenario_multiplier))
-        
-        # Calculate safety stock (industry standard: 1.65 * std_dev * sqrt(lead_time))
-        # Assuming std_dev is 20% of average demand (typical in retail)
         demand_std_dev = avg_daily_demand * 0.2
         safety_stock = int(1.65 * demand_std_dev * np.sqrt(lead_time))
-        
-        # Calculate reorder point: lead time demand + safety stock
         reorder_point = (avg_daily_demand * lead_time) + safety_stock
-        
-        # Starting inventory: Enough to cover initial period
         initial_stock = replenishment_qty * lead_time
         
-        print(f"\nINVENTORY SIMULATION - CONTINUOUS REVIEW (Q, r) POLICY")
-        print(f"=" * 60)
-        print(f"Simulation Period: {days} days")
-        print(f"Lead Time: {lead_time} days")
-        print(f"Scenario: {scenario.upper()} (multiplier: {scenario_multiplier}x)")
-        print(f"\nDEMAND PARAMETERS:")
-        print(f"  Base Daily Demand: {base_demand:.0f} units")
-        print(f"  Scenario Adjusted Demand: {avg_daily_demand} units/day")
-        print(f"  Demand Std Dev: {demand_std_dev:.0f} units")
-        print(f"\nINVENTORY POLICY:")
-        print(f"  Replenishment Quantity (Q): {replenishment_qty} units")
-        print(f"  Reorder Point (r): {reorder_point:.0f} units")
-        print(f"  Safety Stock: {safety_stock} units")
-        print(f"  Initial Stock: {initial_stock} units")
-        print(f"=" * 60 + "\n")
-
-        # Initialize simulation variables
         current_stock = initial_stock
-        inventory_position = initial_stock  # Stock on hand + on order
+        inventory_position = initial_stock
         daily_results = []
         
-        # Tracking metrics
         total_demand = 0
         total_served = 0
         total_shortages = 0
@@ -496,25 +734,19 @@ def simulate():
         min_stock = initial_stock
         stockout_days = 0
         
-        # Order tracking (day: quantity arriving)
         pending_orders = {}
 
         for day in range(days):
-            # Step 1: Receive any pending orders (lead time elapsed)
             if day in pending_orders:
                 received_qty = pending_orders[day]
                 current_stock += received_qty
                 total_replenishments += received_qty
                 del pending_orders[day]
-                print(f"Day {day + 1}: Received order of {received_qty} units")
             
-            # Step 2: Generate daily demand with variability
-            # Add random variation (±20% of avg demand) for realism
             demand_variation = np.random.normal(0, demand_std_dev)
             demand_today = max(0, int(round(avg_daily_demand + demand_variation)))
             total_demand += demand_today
             
-            # Step 3: Fulfill demand from current stock
             if current_stock >= demand_today:
                 current_stock -= demand_today
                 inventory_position -= demand_today
@@ -530,24 +762,15 @@ def simulate():
             
             total_served += served
             
-            # Step 4: Check if we need to reorder (continuous review)
             if inventory_position <= reorder_point and (day + lead_time) not in pending_orders:
-                # Place order that will arrive after lead time
                 arrival_day = day + lead_time
                 if arrival_day < days:
                     pending_orders[arrival_day] = replenishment_qty
                     inventory_position += replenishment_qty
-                    print(f"Day {day + 1}: Placed order for {replenishment_qty} units (arrives Day {arrival_day + 1})")
             
-            # Track peak and minimum stock levels
-            if day == 0:
-                peak_stock = current_stock
-                min_stock = current_stock
-            else:
-                peak_stock = max(peak_stock, current_stock)
-                min_stock = min(min_stock, current_stock)
+            peak_stock = max(peak_stock, current_stock)
+            min_stock = min(min_stock, current_stock)
             
-            # Record daily results
             daily_results.append({
                 "day": day,
                 "demand": demand_today,
@@ -556,7 +779,6 @@ def simulate():
                 "inventory_position": inventory_position
             })
 
-        # Calculate final metrics
         final_stock = current_stock
         service_level = total_served / total_demand if total_demand > 0 else 1.0
         fill_rate = service_level
@@ -565,26 +787,6 @@ def simulate():
         avg_inventory = sum(d['stock'] for d in daily_results) / len(daily_results)
         inventory_turnover = total_served / avg_inventory if avg_inventory > 0 else 0
 
-        print(f"\nSIMULATION RESULTS")
-        print(f"=" * 60)
-        print(f"DEMAND METRICS:")
-        print(f"  Total Demand: {total_demand:,} units")
-        print(f"  Demand Served: {total_served:,} units")
-        print(f"  Total Shortages: {total_shortages:,} units")
-        print(f"\nINVENTORY METRICS:")
-        print(f"  Final Stock: {final_stock:,} units")
-        print(f"  Average Inventory: {avg_inventory:.0f} units")
-        print(f"  Peak Stock: {peak_stock:,} units")
-        print(f"  Minimum Stock: {min_stock:,} units")
-        print(f"  Total Replenishments: {total_replenishments:,} units")
-        print(f"\nPERFORMANCE METRICS:")
-        print(f"  Service Level: {service_level*100:.1f}%")
-        print(f"  Fill Rate: {fill_rate*100:.1f}%")
-        print(f"  Stockout Days: {stockout_days}/{days} ({stockout_rate*100:.1f}%)")
-        print(f"  Inventory Turnover: {inventory_turnover:.2f}x")
-        print(f"=" * 60 + "\n")
-
-        # Generate decision based on industry KPIs
         decision, decision_type = generate_inventory_decision(
             service_level, fill_rate, shortage_rate, stockout_rate, 
             avg_inventory, replenishment_qty, avg_daily_demand, scenario
@@ -632,15 +834,10 @@ def simulate():
 
 def generate_inventory_decision(service_level, fill_rate, shortage_rate, stockout_rate, 
                                 avg_inventory, replenishment_qty, avg_demand, scenario):
-    """
-    Generate inventory management decision based on industry-standard KPIs
-    """
-    # Industry benchmarks
-    TARGET_SERVICE_LEVEL = 0.95  # 95% is industry standard
-    TARGET_FILL_RATE = 0.95
-    ACCEPTABLE_STOCKOUT_RATE = 0.05  # 5% of days
+    """Generate inventory management decision based on KPIs"""
+    TARGET_SERVICE_LEVEL = 0.95
+    ACCEPTABLE_STOCKOUT_RATE = 0.05
     
-    # Critical issues (service level < 90%)
     if service_level < 0.90:
         return (
             "CRITICAL: Service level below 90%. IMMEDIATE ACTION REQUIRED:\n"
@@ -650,17 +847,15 @@ def generate_inventory_decision(service_level, fill_rate, shortage_rate, stockou
             "critical"
         )
     
-    # High stockout rate
     if stockout_rate > 0.15:
         return (
             f"CRITICAL: Stockouts occurring {stockout_rate*100:.1f}% of days. ACTIONS:\n"
             f"• Raise reorder point by {int(avg_demand * 2)} units\n"
-            f"• Increase safety stock to cover demand variability\n"
+            "• Increase safety stock to cover demand variability\n"
             "• Review demand forecasting accuracy",
             "critical"
         )
     
-    # Warning: Below target service level
     if service_level < TARGET_SERVICE_LEVEL:
         improvement_needed = int((TARGET_SERVICE_LEVEL - service_level) * avg_demand * 30)
         return (
@@ -671,17 +866,15 @@ def generate_inventory_decision(service_level, fill_rate, shortage_rate, stockou
             "warning"
         )
     
-    # Warning: Moderate stockout rate
     if stockout_rate > ACCEPTABLE_STOCKOUT_RATE:
         return (
             f"WARNING: Stockouts on {stockout_rate*100:.1f}% of days (target: <5%). ACTIONS:\n"
-            f"• Review and increase reorder point\n"
-            f"• Consider more frequent smaller replenishments\n"
+            "• Review and increase reorder point\n"
+            "• Consider more frequent smaller replenishments\n"
             "• Analyze demand patterns for better forecasting",
             "warning"
         )
     
-    # Info: High inventory levels (excess carrying costs)
     if avg_inventory > avg_demand * 15:
         return (
             f"NOTICE: Average inventory at {int(avg_inventory)} units is high (15+ days of demand). OPTIMIZATION:\n"
@@ -691,38 +884,19 @@ def generate_inventory_decision(service_level, fill_rate, shortage_rate, stockou
             "info"
         )
     
-    # Success: Meeting all targets
     if service_level >= TARGET_SERVICE_LEVEL and stockout_rate <= ACCEPTABLE_STOCKOUT_RATE:
-        if scenario == "promo":
-            return (
-                f"EXCELLENT: Promotion handled successfully with {service_level*100:.1f}% service level!\n"
-                f"• Replenishment strategy effective for demand surge\n"
-                f"• Stockouts minimal at {stockout_rate*100:.1f}% of days\n"
-                "• Current policy is optimal for promotional periods",
-                "success"
-            )
-        elif scenario == "holiday":
-            return (
-                f"OUTSTANDING: Holiday demand managed with {service_level*100:.1f}% service level!\n"
-                f"• Inventory policy successfully handled 50% demand increase\n"
-                f"• Only {stockout_rate*100:.1f}% stockout rate during peak season\n"
-                "• Maintain current replenishment parameters",
-                "success"
-            )
-        else:
-            return (
-                f"OPTIMAL: Inventory performance exceeds industry standards!\n"
-                f"• Service Level: {service_level*100:.1f}% (target: 95%)\n"
-                f"• Stockout Rate: {stockout_rate*100:.1f}% (target: <5%)\n"
-                f"• Current replenishment policy of {replenishment_qty} units is well-calibrated",
-                "success"
-            )
+        return (
+            f"OPTIMAL: Inventory performance exceeds industry standards!\n"
+            f"• Service Level: {service_level*100:.1f}% (target: 95%)\n"
+            f"• Stockout Rate: {stockout_rate*100:.1f}% (target: <5%)\n"
+            f"• Current replenishment policy of {replenishment_qty} units is well-calibrated",
+            "success"
+        )
     
-    # Default: Good performance
     return (
         f"GOOD: Inventory system performing adequately.\n"
         f"• Service Level: {service_level*100:.1f}%\n"
-        f"• Continue monitoring key metrics\n"
+        "• Continue monitoring key metrics\n"
         "• Minor adjustments may optimize performance",
         "success"
     )

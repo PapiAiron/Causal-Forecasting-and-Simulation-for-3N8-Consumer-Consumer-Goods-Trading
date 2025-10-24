@@ -1,15 +1,25 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
 import { useTheme } from "../components/ThemeContext";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, Mail } from "lucide-react";
 import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { 
+  doc, 
+  updateDoc, 
+  serverTimestamp, 
+  getDoc, 
+  collection, 
+  query, 
+  where, 
+  getDocs,
+  addDoc  // ADDED: Import addDoc for creating notifications
+} from "firebase/firestore";
 
-const Login = ({ onNavigate }) => {
+const Login = ({ onNavigate, onUserLogin }) => {
   const { theme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,8 +30,10 @@ const Login = ({ onNavigate }) => {
   const [attempts, setAttempts] = useState(0);
   const [lockoutTime, setLockoutTime] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [pendingVerification, setPendingVerification] = useState(false);
+  const [pendingUserEmail, setPendingUserEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Check for lockout on component mount
   useEffect(() => {
     const storedLockout = localStorage.getItem("loginLockout");
     if (storedLockout) {
@@ -35,7 +47,6 @@ const Login = ({ onNavigate }) => {
     }
   }, []);
 
-  // Countdown timer for lockout
   useEffect(() => {
     if (lockoutTime) {
       const interval = setInterval(() => {
@@ -49,6 +60,15 @@ const Login = ({ onNavigate }) => {
       return () => clearInterval(interval);
     }
   }, [lockoutTime]);
+
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => {
+        setResendCooldown(resendCooldown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   const getErrorMessage = (code) => {
     switch (code) {
@@ -80,19 +100,80 @@ const Login = ({ onNavigate }) => {
     return password.length >= 6;
   };
 
+  // FIXED: Proper notification creation for admins
+  const notifyAdminsAboutPendingUser = async (userEmail, userName) => {
+    try {
+      const usersRef = collection(db, "users");
+      const adminQuery = query(usersRef, where("role", "==", "admin"));
+      const adminSnapshot = await getDocs(adminQuery);
+
+      const notifications = [];
+      adminSnapshot.forEach((adminDoc) => {
+        notifications.push(
+          addDoc(collection(db, "notifications"), {
+            recipientId: adminDoc.id,
+            type: "pending_verification_reminder",
+            title: "User Verification Pending",
+            message: `${userName} (${userEmail}) is waiting for account verification.`,
+            userEmail: userEmail,
+            userName: userName,
+            read: false,
+            createdAt: serverTimestamp(),
+          })
+        );
+      });
+
+      await Promise.all(notifications);
+      console.log(`Notified ${notifications.length} admin(s) about pending user: ${userEmail}`);
+    } catch (error) {
+      console.error("Error notifying admins:", error);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (resendCooldown > 0) return;
+
+    try {
+      setLoading(true);
+      setError("");
+      
+      // Get the user's name from Firestore
+      const usersRef = collection(db, "users");
+      const userQuery = query(usersRef, where("email", "==", pendingUserEmail));
+      const userSnapshot = await getDocs(userQuery);
+      
+      let userName = "User";
+      if (!userSnapshot.empty) {
+        const userData = userSnapshot.docs[0].data();
+        userName = userData.name || userData.displayName || "User";
+      }
+      
+      // Notify admins again
+      await notifyAdminsAboutPendingUser(pendingUserEmail, userName);
+      
+      setSuccess("Verification reminder sent to administrators!");
+      setResendCooldown(60); // 60 second cooldown
+    } catch (error) {
+      console.error("Resend error:", error);
+      setError("Failed to send verification reminder. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    setPendingVerification(false);
+    setPendingUserEmail("");
 
-    // Check if locked out
     if (lockoutTime && Date.now() < lockoutTime) {
       const remainingTime = Math.ceil((lockoutTime - Date.now()) / 1000);
       setError(`Too many failed attempts. Please wait ${remainingTime} seconds.`);
       return;
     }
 
-    // Validate inputs
     if (!validateEmail(email)) {
       setError("Please enter a valid email address.");
       return;
@@ -103,9 +184,8 @@ const Login = ({ onNavigate }) => {
       return;
     }
 
-    // Check attempt limit
     if (attempts >= 5) {
-      const lockoutEnd = Date.now() + 300000; // 5 minutes lockout
+      const lockoutEnd = Date.now() + 300000;
       setLockoutTime(lockoutEnd);
       localStorage.setItem("loginLockout", lockoutEnd.toString());
       setError("Too many failed attempts. Account locked for 5 minutes.");
@@ -116,35 +196,95 @@ const Login = ({ onNavigate }) => {
       setLoading(true);
       const { user } = await signInWithEmailAndPassword(auth, email, password);
 
-      // Check email verification
-      if (!user.emailVerified) {
-        setError("Please verify your email before logging in.");
-        setLoading(false);
-        return;
-      }
-
-      // Update last login timestamp in Firestore
       const userRef = doc(db, "users", user.uid);
       const userDoc = await getDoc(userRef);
 
       if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // Check if account is verified by admin
+        if (!userData.emailVerifiedByAdmin || userData.accountStatus !== "active") {
+          await auth.signOut();
+          setPendingVerification(true);
+          setPendingUserEmail(userData.email);
+          
+          // Notify admins about the pending verification
+          await notifyAdminsAboutPendingUser(userData.email, userData.name || userData.displayName || "User");
+          
+          setError("Your account is pending admin verification. Please wait for an administrator to approve your account.");
+          setLoading(false);
+          return;
+        }
+
+        // Check if rejected
+        if (userData.accountStatus === "rejected") {
+          await auth.signOut();
+          setError(`Your account was not approved. Reason: ${userData.rejectionReason || "Contact administrator for details"}`);
+          setLoading(false);
+          return;
+        }
+
+        // Check account status
+        if (userData.accountStatus === "disabled") {
+          await auth.signOut();
+          setError("Your account has been disabled. Contact an administrator.");
+          setLoading(false);
+          return;
+        }
+
+        if (userData.accountStatus === "suspended") {
+          await auth.signOut();
+          setError("Your account is suspended. Contact an administrator.");
+          setLoading(false);
+          return;
+        }
+
+        // Update last login
         await updateDoc(userRef, {
           lastLoginAt: serverTimestamp(),
-          loginCount: (userDoc.data().loginCount || 0) + 1,
+          loginCount: (userData.loginCount || 0) + 1,
         });
-      } else {
-        // Create user document if it doesn't exist
-        await updateDoc(userRef, {
-        email: user.email,
-        displayName: user.displayName || "",
-        lastLoginAt: serverTimestamp(),
-        loginCount: 1,
-        emailVerified: true,
-      });
 
+        // Store user role in session for quick access
+        sessionStorage.setItem("userRole", userData.role || "staff");
+        sessionStorage.setItem("userId", user.uid);
+
+        // Call callback with user data if provided
+        if (onUserLogin) {
+          onUserLogin({
+            uid: user.uid,
+            email: user.email,
+            name: userData.name,
+            role: userData.role || "staff",
+            permissions: userData.permissions || {}
+          });
+        }
+      } else {
+        // Create user document if it doesn't exist with pending status
+        await updateDoc(userRef, {
+          email: user.email,
+          displayName: user.displayName || "",
+          name: user.displayName || "",
+          lastLoginAt: serverTimestamp(),
+          loginCount: 1,
+          role: "staff",
+          accountStatus: "pending",
+          emailVerifiedByAdmin: false,
+          createdAt: serverTimestamp()
+        });
+        
+        await auth.signOut();
+        setPendingVerification(true);
+        setPendingUserEmail(user.email);
+        
+        // Notify admins about new pending user
+        await notifyAdminsAboutPendingUser(user.email, user.displayName || "New User");
+        
+        setError("Your account is pending admin verification. Please wait for an administrator to approve your account.");
+        setLoading(false);
+        return;
       }
 
-      // Reset attempts on successful login
       setAttempts(0);
       localStorage.removeItem("loginLockout");
       
@@ -154,8 +294,6 @@ const Login = ({ onNavigate }) => {
       console.error("Login error:", err);
       setError(getErrorMessage(err.code));
       setAttempts((prev) => prev + 1);
-      
-      // Store attempts in localStorage for persistence
       localStorage.setItem("loginAttempts", (attempts + 1).toString());
     } finally {
       setLoading(false);
@@ -196,36 +334,6 @@ const Login = ({ onNavigate }) => {
     }
   };
 
-  const resendVerificationEmail = async () => {
-    if (!email) {
-      setError("Please enter your email first.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const { user } = await signInWithEmailAndPassword(auth, email, password);
-      
-      if (user.emailVerified) {
-        setError("Email is already verified. Please try logging in.");
-        return;
-      }
-
-      await sendEmailVerification(user, {
-        url: window.location.origin + "/login",
-        handleCodeInApp: true,
-      });
-      
-      await auth.signOut();
-      setSuccess("Verification email sent! Check your inbox.");
-    } catch (err) {
-      console.error("Resend verification error:", err);
-      setError("Failed to resend verification email.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const getRemainingTime = () => {
     if (!lockoutTime) return "";
     const remaining = Math.ceil((lockoutTime - Date.now()) / 1000);
@@ -237,7 +345,6 @@ const Login = ({ onNavigate }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-8">
-        {/* Logo at the top */}
         <div className="flex justify-center mb-6">
           <img 
             src="/3N8.png" 
@@ -249,17 +356,35 @@ const Login = ({ onNavigate }) => {
           {resetMode ? "Reset Password" : "Sign In to Your Account"}
         </h2>
 
-        {error && (
+        {pendingVerification && (
+          <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-300 mb-1">
+                  Account Pending Verification
+                </h3>
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-3">
+                  Your account requires administrator verification before you can access the system. An administrator will review and approve your account. You will be notified once verified.
+                </p>
+                <button
+                  onClick={handleResendVerification}
+                  disabled={loading || resendCooldown > 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  <Mail size={16} />
+                  {resendCooldown > 0 
+                    ? `Resend in ${resendCooldown}s` 
+                    : "Remind Admins"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && !pendingVerification && (
           <div className="text-red-500 text-sm mb-3 font-medium bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
             {error}
-            {error.includes("verify your email") && (
-              <button
-                onClick={resendVerificationEmail}
-                className="block mt-2 underline hover:no-underline"
-              >
-                Resend verification email
-              </button>
-            )}
           </div>
         )}
         
@@ -357,6 +482,7 @@ const Login = ({ onNavigate }) => {
                   setResetMode(true);
                   setError("");
                   setSuccess("");
+                  setPendingVerification(false);
                 }}
                 className="hover:underline block mb-3"
                 style={{ color: theme.chart }}

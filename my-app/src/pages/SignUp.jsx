@@ -7,7 +7,7 @@ import {
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
 
 const SignUp = ({ onNavigate }) => {
   const { theme } = useTheme();
@@ -15,6 +15,7 @@ const SignUp = ({ onNavigate }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState("staff"); // Default to staff instead of user
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -89,6 +90,40 @@ const SignUp = ({ onNavigate }) => {
     }
   };
 
+  // Function to send notification to all admins
+  const notifyAdmins = async (newUser) => {
+    try {
+      const usersRef = collection(db, "users");
+      const adminQuery = query(usersRef, where("role", "==", "admin"));
+      const adminSnapshot = await getDocs(adminQuery);
+      
+      // Create notification for each admin
+      const notifications = [];
+      adminSnapshot.forEach((adminDoc) => {
+        notifications.push(
+          setDoc(doc(collection(db, "notifications")), {
+            recipientId: adminDoc.id,
+            type: "new_registration",
+            title: "New User Registration",
+            message: `${newUser.name} (${newUser.email}) has registered as ${newUser.role} and is awaiting verification.`,
+            userId: newUser.uid,
+            userName: newUser.name,
+            userEmail: newUser.email,
+            userRole: newUser.role,
+            read: false,
+            createdAt: serverTimestamp()
+          })
+        );
+      });
+
+      await Promise.all(notifications);
+      console.log("Admin notifications sent successfully");
+    } catch (error) {
+      console.error("Error notifying admins:", error);
+      // Don't fail signup if notification fails
+    }
+  };
+
   const handleSignup = async (e) => {
     e.preventDefault();
     setError("");
@@ -148,7 +183,7 @@ const SignUp = ({ onNavigate }) => {
     try {
       setLoading(true);
 
-      // After createUserWithEmailAndPassword
+      // Create user account
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
 
       // Add display name to Firebase Auth
@@ -160,15 +195,38 @@ const SignUp = ({ onNavigate }) => {
         handleCodeInApp: true,
       });
 
-      // Save user profile in Firestore
-      await setDoc(doc(db, "users", user.uid), {
+      // Get permissions based on selected role
+      const getPermissionsByRole = (role) => {
+        if (role === 'admin') {
+          return {
+            canViewAnalytics: true,
+            canEditUsers: true,
+            canManageSystem: true,
+            canDeleteUsers: true,
+            canViewAllData: true
+          };
+        } else { // staff
+          return {
+            canViewAnalytics: true,
+            canEditUsers: true,
+            canManageSystem: false,
+            canDeleteUsers: false,
+            canViewAllData: true
+          };
+        }
+      };
+
+      // Save user profile in Firestore with role system (NO USER ROLE)
+      // Save user profile in Firestore with role system (NO USER ROLE)
+      const newUserData = {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         createdAt: serverTimestamp(),
         emailVerified: false,
-        role: "user",
+        emailVerifiedByAdmin: false, // Added to match login requirements
+        role: role, // Either 'staff' or 'admin'
         loginCount: 0,
-        accountStatus: "active",
+        accountStatus: "pending", // Changed from "active" to "pending" to require admin approval
         profile: {
           displayName: name.trim(),
           photoURL: null,
@@ -177,14 +235,24 @@ const SignUp = ({ onNavigate }) => {
           passwordChangedAt: serverTimestamp(),
           lastPasswordReset: null,
         },
+        permissions: getPermissionsByRole(role)
+      };
+
+      await setDoc(doc(db, "users", user.uid), newUserData);
+
+      // Notify all admins about new registration
+      await notifyAdmins({
+        uid: user.uid,
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        role: role
       });
 
-      // ✅ Now sign out AFTER sending verification
+      // Sign out user until they verify email
       await auth.signOut();
 
-
       setSuccess(
-        "Account created successfully! Please check your email to verify your account before logging in."
+        `Account created successfully as ${role === 'admin' ? 'Administrator' : 'Staff'}! Admins have been notified. Please check your email to verify your account before logging in.`
       );
       
       // Clear form
@@ -192,12 +260,13 @@ const SignUp = ({ onNavigate }) => {
       setEmail("");
       setPassword("");
       setConfirmPassword("");
+      setRole("staff");
       setPasswordStrength("");
 
-      // Redirect to login after 3 seconds
+      // Redirect to login after 4 seconds
       setTimeout(() => {
         onNavigate("login");
-      }, 1000);
+      }, 4000);
 
     } catch (err) {
       console.error("Signup error:", err);
@@ -210,7 +279,6 @@ const SignUp = ({ onNavigate }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-8">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-8">
-        {/* Logo at the top */}
         <div className="flex justify-center mb-6">
           <img 
             src="/3N8.png" 
@@ -260,6 +328,28 @@ const SignUp = ({ onNavigate }) => {
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-opacity-50 dark:bg-gray-700 dark:text-white disabled:opacity-50"
               style={{ focusRingColor: theme.chart }}
             />
+          </div>
+
+          {/* Role Selection - ONLY STAFF AND ADMIN */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Select Role
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              disabled={loading}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-opacity-50 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+              style={{ focusRingColor: theme.chart }}
+            >
+              <option value="staff">Staff</option>
+              <option value="admin">Administrator</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {role === 'admin' 
+                ? 'Full system access with all permissions' 
+                : 'Can view analytics and edit users'}
+            </p>
           </div>
 
           <div>

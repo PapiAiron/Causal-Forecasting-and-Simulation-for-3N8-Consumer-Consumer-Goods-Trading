@@ -8,5 +8,5 @@ Evaluation tools for Model 3
 Gap Analysis Matrix
 exprole Kaggle pre-trained Models
 staff confirm/ admin can post/details
-admin/staff functionalities
+Add notification to verify new staff/admin accounts
 Realtime data in Causal Analysis

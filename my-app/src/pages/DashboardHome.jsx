@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   BarChart3, 
@@ -17,19 +17,43 @@ import {
   UserPlus,
   Calendar
 } from 'lucide-react';
+import { auth, db } from "../firebase"; // Add this import
+import { doc, getDoc } from "firebase/firestore"; // Add this import
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
 
+
 // Modern Sidebar Component - Completely Hidden by Default
+// Update the Sidebar component in DashboardHome
 const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
   const { theme } = useTheme();
+  const [userRole, setUserRole] = useState('user');
   
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setUserRole(userDoc.data().role || 'user');
+        }
+      }
+    };
+    fetchUserRole();
+  }, []);
+  
+    
   const navigationItems = [
-    { id: 'home', label: 'Dashboard', icon: Home },
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
-    { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp },
-    { id: 'simulation', label: 'Simulation', icon: Play }
+    { id: 'home', label: 'Dashboard', icon: Home, roles: ['admin', 'staff'] },
+    { id: 'overview', label: 'Overview', icon: BarChart3, roles: ['admin', 'staff'] },
+    { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp, roles: ['admin', 'staff'] },
+    { id: 'simulation', label: 'Simulation', icon: Play, roles: ['admin', 'staff'] },
+    { id: 'manage-accounts', label: 'Manage Accounts', icon: UserPlus, roles: ['admin', 'staff'] },
   ];
+  // Filter navigation based on user role
+  const filteredNav = navigationItems.filter(item => 
+    item.roles.includes(userRole)
+  );
 
   return (
     <>
@@ -78,9 +102,9 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </div>
         </div>
 
-        <div className="flex-1 px-6 py-2">
+        <div className="flex-1 px-6 py-2 overflow-y-auto max-h-[calc(100vh-300px)]">
           <nav className="space-y-2">
-            {navigationItems.map((item) => {
+            {filteredNav.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               
@@ -118,8 +142,12 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
               <User className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">John Doe</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Administrator</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                {auth.currentUser?.displayName || 'User'}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                {userRole}
+              </p>
             </div>
             <Settings className="w-4 h-4 text-gray-400" />
           </div>
@@ -128,6 +156,7 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
     </>
   );
 };
+
 
 const ProfileDropdown = ({ onNavigate }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -156,7 +185,9 @@ const ProfileDropdown = ({ onNavigate }) => {
           <User className="w-5 h-5 text-white" />
         </div>
         <div className="hidden md:block text-left">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">John Doe</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+            {auth.currentUser?.displayName || 'User'}
+          </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">Administrator</p>
         </div>
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
@@ -182,8 +213,12 @@ const ProfileDropdown = ({ onNavigate }) => {
                   <User className="w-7 h-7 text-white" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-base font-semibold text-gray-900 dark:text-white">John Doe</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">john.doe@company.com</p>
+                  <p className="text-base font-semibold text-gray-900 dark:text-white">
+                    {auth.currentUser?.displayName || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {auth.currentUser?.email || 'user@company.com'}
+                  </p>
                   <span className="inline-block text-xs font-medium px-2.5 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full mt-2">
                     Administrator
                   </span>
@@ -211,16 +246,15 @@ const ProfileDropdown = ({ onNavigate }) => {
 
             <div className="border-t border-gray-200/30 dark:border-gray-700/30">
               <button 
-                onClick={() => {
-                  // 🔹 Clear auth (adjust to your auth method)
-                  localStorage.removeItem("authToken");
-                  sessionStorage.clear();
-
-                  // 🔹 Optionally call backend logout endpoint
-                  // await fetch('/api/logout', { method: 'POST' });
-
-                  // 🔹 Navigate to login
-                  handleNavigation("login");
+                onClick={async () => {
+                  try {
+                    await auth.signOut();
+                    localStorage.removeItem("authToken");
+                    sessionStorage.clear();
+                    handleNavigation("login");
+                  } catch (error) {
+                    console.error("Logout error:", error);
+                  }
                 }}
                 className="flex items-center space-x-3 px-6 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 w-full text-left group"
               >

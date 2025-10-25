@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutWrapper } from './DashboardHome';
 import { Card, Header } from '../components/SharedComponents';
-import { Settings, User, Mail, Lock, Bell, Globe, Moon, Sun, Palette, Save, Eye, EyeOff } from 'lucide-react';
+import { Settings, User, Mail, Lock, Bell, Globe, Moon, Sun, Palette, Save, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useTheme } from '../components/ThemeContext';
 import { auth, db } from '../firebase';
 import { 
@@ -14,13 +14,15 @@ import {
   updatePassword, 
   reauthenticateWithCredential, 
   EmailAuthProvider,
-  updateEmail
+  updateEmail,
+  updateProfile
 } from 'firebase/auth';
 
 const AccountSettings = ({ onNavigate }) => {
   const { theme, darkMode, toggleDarkMode, colorTheme, setColorTheme } = useTheme();
   
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
@@ -92,12 +94,18 @@ const AccountSettings = ({ onNavigate }) => {
 
   const handleSaveProfile = async () => {
     try {
+      setSaving(true);
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
         alert('No user logged in');
         return;
       }
+
+      // Update Firebase Auth displayName first
+      await updateProfile(currentUser, {
+        displayName: fullName
+      });
 
       // Update Firestore document
       const userRef = doc(db, 'users', currentUser.uid);
@@ -114,16 +122,37 @@ const AccountSettings = ({ onNavigate }) => {
         } catch (emailError) {
           if (emailError.code === 'auth/requires-recent-login') {
             alert('Please log out and log back in to change your email address');
+            setSaving(false);
             return;
           }
           throw emailError;
         }
       }
 
-      alert('Profile settings saved successfully!');
+      // Force refresh auth state
+      await currentUser.reload();
+      
+      // Dispatch event to notify all components about the profile update
+      window.dispatchEvent(new CustomEvent('userProfileUpdated', { 
+        detail: { 
+          name: fullName, 
+          email: email,
+          displayName: fullName,
+          uid: currentUser.uid
+        } 
+      }));
+
+      alert('Profile settings saved successfully! The page will refresh to update all information.');
+      
+      // Reload the page after a short delay to ensure all components update
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+      
     } catch (error) {
       console.error('Error saving profile:', error);
       alert('Failed to save profile: ' + error.message);
+      setSaving(false);
     }
   };
 
@@ -144,6 +173,7 @@ const AccountSettings = ({ onNavigate }) => {
     }
 
     try {
+      setSaving(true);
       const currentUser = auth.currentUser;
       
       if (!currentUser || !currentUser.email) {
@@ -179,14 +209,19 @@ const AccountSettings = ({ onNavigate }) => {
         alert('Current password is incorrect');
       } else if (error.code === 'auth/weak-password') {
         alert('New password is too weak');
+      } else if (error.code === 'auth/invalid-credential') {
+        alert('Invalid credentials. Please check your current password.');
       } else {
         alert('Failed to change password: ' + error.message);
       }
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleSaveNotifications = async () => {
     try {
+      setSaving(true);
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
@@ -206,6 +241,8 @@ const AccountSettings = ({ onNavigate }) => {
     } catch (error) {
       console.error('Error saving notifications:', error);
       alert('Failed to save notification settings');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -253,7 +290,11 @@ const AccountSettings = ({ onNavigate }) => {
                     onChange={(e) => setFullName(e.target.value)}
                     className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent transition-all"
                     style={{ '--tw-ring-color': theme.chart + '40' }}
+                    disabled={saving}
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    This name will appear in the sidebar and profile dropdown
+                  </p>
                 </div>
 
                 <div>
@@ -266,6 +307,7 @@ const AccountSettings = ({ onNavigate }) => {
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent transition-all"
                     style={{ '--tw-ring-color': theme.chart + '40' }}
+                    disabled={saving}
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Changing your email requires re-authentication
@@ -301,14 +343,24 @@ const AccountSettings = ({ onNavigate }) => {
 
                 <button
                   onClick={handleSaveProfile}
-                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2"
+                  disabled={saving}
+                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ 
                     backgroundColor: theme.chart,
                     boxShadow: `0 4px 15px ${theme.chart}40`
                   }}
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Changes</span>
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
                 </button>
               </div>
             </Card>
@@ -335,10 +387,12 @@ const AccountSettings = ({ onNavigate }) => {
                       className="w-full px-4 py-2 pr-12 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent transition-all"
                       style={{ '--tw-ring-color': theme.chart + '40' }}
                       placeholder="Enter current password"
+                      disabled={saving}
                     />
                     <button
                       onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                       className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      type="button"
                     >
                       {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -356,11 +410,13 @@ const AccountSettings = ({ onNavigate }) => {
                       onChange={(e) => setNewPassword(e.target.value)}
                       className="w-full px-4 py-2 pr-12 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent transition-all"
                       style={{ '--tw-ring-color': theme.chart + '40' }}
-                      placeholder="Enter new password"
+                      placeholder="Enter new password (min. 6 characters)"
+                      disabled={saving}
                     />
                     <button
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      type="button"
                     >
                       {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -379,10 +435,12 @@ const AccountSettings = ({ onNavigate }) => {
                       className="w-full px-4 py-2 pr-12 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent transition-all"
                       style={{ '--tw-ring-color': theme.chart + '40' }}
                       placeholder="Confirm new password"
+                      disabled={saving}
                     />
                     <button
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      type="button"
                     >
                       {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -391,14 +449,24 @@ const AccountSettings = ({ onNavigate }) => {
 
                 <button
                   onClick={handleChangePassword}
-                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2"
+                  disabled={saving}
+                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ 
                     backgroundColor: theme.chart,
                     boxShadow: `0 4px 15px ${theme.chart}40`
                   }}
                 >
-                  <Lock className="w-4 h-4" />
-                  <span>Update Password</span>
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4" />
+                      <span>Update Password</span>
+                    </>
+                  )}
                 </button>
               </div>
             </Card>
@@ -413,7 +481,7 @@ const AccountSettings = ({ onNavigate }) => {
               </div>
               
               <div className="space-y-4">
-                <label className="flex items-center justify-between cursor-pointer">
+                <label className="flex items-center justify-between cursor-pointer p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
                       Email Notifications
@@ -428,10 +496,11 @@ const AccountSettings = ({ onNavigate }) => {
                     onChange={(e) => setEmailNotifications(e.target.checked)}
                     className="w-5 h-5 rounded"
                     style={{ accentColor: theme.chart }}
+                    disabled={saving}
                   />
                 </label>
 
-                <label className="flex items-center justify-between cursor-pointer">
+                <label className="flex items-center justify-between cursor-pointer p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
                       Push Notifications
@@ -446,10 +515,11 @@ const AccountSettings = ({ onNavigate }) => {
                     onChange={(e) => setPushNotifications(e.target.checked)}
                     className="w-5 h-5 rounded"
                     style={{ accentColor: theme.chart }}
+                    disabled={saving}
                   />
                 </label>
 
-                <label className="flex items-center justify-between cursor-pointer">
+                <label className="flex items-center justify-between cursor-pointer p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
                       Weekly Reports
@@ -464,19 +534,30 @@ const AccountSettings = ({ onNavigate }) => {
                     onChange={(e) => setWeeklyReports(e.target.checked)}
                     className="w-5 h-5 rounded"
                     style={{ accentColor: theme.chart }}
+                    disabled={saving}
                   />
                 </label>
 
                 <button
                   onClick={handleSaveNotifications}
-                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2"
+                  disabled={saving}
+                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
                   style={{ 
                     backgroundColor: theme.chart,
                     boxShadow: `0 4px 15px ${theme.chart}40`
                   }}
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Preferences</span>
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save Preferences</span>
+                    </>
+                  )}
                 </button>
               </div>
             </Card>

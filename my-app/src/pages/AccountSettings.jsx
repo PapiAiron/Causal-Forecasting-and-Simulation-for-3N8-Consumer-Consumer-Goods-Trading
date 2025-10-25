@@ -1,15 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutWrapper } from './DashboardHome';
 import { Card, Header } from '../components/SharedComponents';
 import { Settings, User, Mail, Lock, Bell, Globe, Moon, Sun, Palette, Save, Eye, EyeOff } from 'lucide-react';
 import { useTheme } from '../components/ThemeContext';
+import { auth, db } from '../firebase';
+import { 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  serverTimestamp 
+} from 'firebase/firestore';
+import { 
+  updatePassword, 
+  reauthenticateWithCredential, 
+  EmailAuthProvider,
+  updateEmail
+} from 'firebase/auth';
 
 const AccountSettings = ({ onNavigate }) => {
   const { theme, darkMode, toggleDarkMode, colorTheme, setColorTheme } = useTheme();
   
-  const [fullName, setFullName] = useState('John Doe');
-  const [email, setEmail] = useState('john.doe@company.com');
-  const [role] = useState('Administrator');
+  const [loading, setLoading] = useState(true);
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('');
+  const [accountStatus, setAccountStatus] = useState('');
   
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -35,31 +50,177 @@ const AccountSettings = ({ onNavigate }) => {
     { key: 'pink', name: 'Hot Pink', hex: '#EC4899' }
   ];
 
-  const handleSaveProfile = () => {
-    console.log('Saving profile:', { fullName, email });
-    alert('Profile settings saved successfully!');
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      setLoading(true);
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        alert('No user logged in');
+        return;
+      }
+
+      // Fetch user data from Firestore
+      const userRef = doc(db, 'users', currentUser.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        setFullName(userData.name || '');
+        setEmail(userData.email || currentUser.email || '');
+        setRole(userData.role || 'staff');
+        setAccountStatus(userData.accountStatus || 'active');
+        setEmailNotifications(userData.emailNotifications ?? true);
+        setPushNotifications(userData.pushNotifications ?? true);
+        setWeeklyReports(userData.weeklyReports ?? false);
+      } else {
+        // If user document doesn't exist, use auth data
+        setEmail(currentUser.email || '');
+        setFullName(currentUser.displayName || '');
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      alert('Failed to load user data');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleChangePassword = () => {
+  const handleSaveProfile = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        alert('No user logged in');
+        return;
+      }
+
+      // Update Firestore document
+      const userRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userRef, {
+        name: fullName,
+        email: email,
+        updatedAt: serverTimestamp()
+      });
+
+      // If email changed, update Firebase Auth email
+      if (email !== currentUser.email) {
+        try {
+          await updateEmail(currentUser, email);
+        } catch (emailError) {
+          if (emailError.code === 'auth/requires-recent-login') {
+            alert('Please log out and log back in to change your email address');
+            return;
+          }
+          throw emailError;
+        }
+      }
+
+      alert('Profile settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      alert('Failed to save profile: ' + error.message);
+    }
+  };
+
+  const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       alert('Please fill in all password fields');
       return;
     }
+    
     if (newPassword !== confirmPassword) {
       alert('New passwords do not match!');
       return;
     }
-    console.log('Changing password');
-    alert('Password changed successfully!');
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+
+    if (newPassword.length < 6) {
+      alert('New password must be at least 6 characters long');
+      return;
+    }
+
+    try {
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser || !currentUser.email) {
+        alert('No user logged in');
+        return;
+      }
+
+      // Re-authenticate user before changing password
+      const credential = EmailAuthProvider.credential(
+        currentUser.email,
+        currentPassword
+      );
+
+      await reauthenticateWithCredential(currentUser, credential);
+      
+      // Update password
+      await updatePassword(currentUser, newPassword);
+
+      // Update Firestore to log password change
+      const userRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userRef, {
+        passwordChangedAt: serverTimestamp()
+      });
+
+      alert('Password changed successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      console.error('Error changing password:', error);
+      
+      if (error.code === 'auth/wrong-password') {
+        alert('Current password is incorrect');
+      } else if (error.code === 'auth/weak-password') {
+        alert('New password is too weak');
+      } else {
+        alert('Failed to change password: ' + error.message);
+      }
+    }
   };
 
-  const handleSaveNotifications = () => {
-    console.log('Saving notifications:', { emailNotifications, pushNotifications, weeklyReports });
-    alert('Notification settings saved successfully!');
+  const handleSaveNotifications = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        alert('No user logged in');
+        return;
+      }
+
+      const userRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userRef, {
+        emailNotifications,
+        pushNotifications,
+        weeklyReports,
+        updatedAt: serverTimestamp()
+      });
+
+      alert('Notification settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving notifications:', error);
+      alert('Failed to save notification settings');
+    }
   };
+
+  if (loading) {
+    return (
+      <LayoutWrapper currentPage="accountsettings" onNavigate={onNavigate}>
+        <div className="pt-24 flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading account settings...</p>
+          </div>
+        </div>
+      </LayoutWrapper>
+    );
+  }
 
   return (
     <LayoutWrapper currentPage="accountsettings" onNavigate={onNavigate}>
@@ -72,7 +233,7 @@ const AccountSettings = ({ onNavigate }) => {
         
         <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="space-y-6">
-            
+            {/* Profile Information */}
             <Card className="p-6">
               <div className="flex items-center space-x-3 mb-6">
                 <User className="w-5 h-5" style={{ color: theme.chart }} />
@@ -106,6 +267,9 @@ const AccountSettings = ({ onNavigate }) => {
                     className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent transition-all"
                     style={{ '--tw-ring-color': theme.chart + '40' }}
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Changing your email requires re-authentication
+                  </p>
                 </div>
 
                 <div>
@@ -114,13 +278,25 @@ const AccountSettings = ({ onNavigate }) => {
                   </label>
                   <input
                     type="text"
-                    value={role}
+                    value={role.charAt(0).toUpperCase() + role.slice(1)}
                     disabled
                     className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 cursor-not-allowed"
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Contact your administrator to change your role
                   </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Account Status
+                  </label>
+                  <input
+                    type="text"
+                    value={accountStatus.charAt(0).toUpperCase() + accountStatus.slice(1)}
+                    disabled
+                    className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 cursor-not-allowed"
+                  />
                 </div>
 
                 <button
@@ -137,6 +313,7 @@ const AccountSettings = ({ onNavigate }) => {
               </div>
             </Card>
 
+            {/* Change Password */}
             <Card className="p-6">
               <div className="flex items-center space-x-3 mb-6">
                 <Lock className="w-5 h-5" style={{ color: theme.chart }} />
@@ -226,9 +403,83 @@ const AccountSettings = ({ onNavigate }) => {
               </div>
             </Card>
 
-            
+            {/* Notification Settings */}
+            <Card className="p-6">
+              <div className="flex items-center space-x-3 mb-6">
+                <Bell className="w-5 h-5" style={{ color: theme.chart }} />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Notification Preferences
+                </h3>
+              </div>
+              
+              <div className="space-y-4">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      Email Notifications
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Receive email updates about important events
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={emailNotifications}
+                    onChange={(e) => setEmailNotifications(e.target.checked)}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: theme.chart }}
+                  />
+                </label>
 
-        
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      Push Notifications
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Receive browser push notifications
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={pushNotifications}
+                    onChange={(e) => setPushNotifications(e.target.checked)}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: theme.chart }}
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      Weekly Reports
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Receive weekly summary reports via email
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={weeklyReports}
+                    onChange={(e) => setWeeklyReports(e.target.checked)}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: theme.chart }}
+                  />
+                </label>
+
+                <button
+                  onClick={handleSaveNotifications}
+                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2"
+                  style={{ 
+                    backgroundColor: theme.chart,
+                    boxShadow: `0 4px 15px ${theme.chart}40`
+                  }}
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save Preferences</span>
+                </button>
+              </div>
+            </Card>
           </div>
         </main>
       </div>

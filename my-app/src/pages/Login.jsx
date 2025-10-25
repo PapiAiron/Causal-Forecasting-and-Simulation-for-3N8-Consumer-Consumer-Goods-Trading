@@ -97,6 +97,12 @@ const Login = ({ onNavigate, onUserLogin }) => {
       return;
     }
 
+    // Check if Firebase connection is blocked
+    if (!navigator.onLine) {
+      setError("No internet connection. Please check your network.");
+      return;
+    }
+
     if (!validateEmail(email)) {
       setError("Please enter a valid email address.");
       return;

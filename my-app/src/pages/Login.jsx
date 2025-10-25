@@ -4,19 +4,13 @@ import { useTheme } from "../components/ThemeContext";
 import { Eye, EyeOff, AlertCircle, Mail } from "lucide-react";
 import {
   signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-  sendEmailVerification,
+  sendPasswordResetEmail
 } from "firebase/auth";
 import { 
   doc, 
   updateDoc, 
   serverTimestamp, 
-  getDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs,
-  addDoc  // ADDED: Import addDoc for creating notifications
+  getDoc
 } from "firebase/firestore";
 
 const Login = ({ onNavigate, onUserLogin }) => {
@@ -32,7 +26,6 @@ const Login = ({ onNavigate, onUserLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
   const [pendingUserEmail, setPendingUserEmail] = useState("");
-  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     const storedLockout = localStorage.getItem("loginLockout");
@@ -60,15 +53,6 @@ const Login = ({ onNavigate, onUserLogin }) => {
       return () => clearInterval(interval);
     }
   }, [lockoutTime]);
-
-  useEffect(() => {
-    if (resendCooldown > 0) {
-      const timer = setTimeout(() => {
-        setResendCooldown(resendCooldown - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [resendCooldown]);
 
   const getErrorMessage = (code) => {
     switch (code) {
@@ -98,67 +82,6 @@ const Login = ({ onNavigate, onUserLogin }) => {
 
   const validatePassword = (password) => {
     return password.length >= 6;
-  };
-
-  // FIXED: Proper notification creation for admins
-  const notifyAdminsAboutPendingUser = async (userEmail, userName) => {
-    try {
-      const usersRef = collection(db, "users");
-      const adminQuery = query(usersRef, where("role", "==", "admin"));
-      const adminSnapshot = await getDocs(adminQuery);
-
-      const notifications = [];
-      adminSnapshot.forEach((adminDoc) => {
-        notifications.push(
-          addDoc(collection(db, "notifications"), {
-            recipientId: adminDoc.id,
-            type: "pending_verification_reminder",
-            title: "User Verification Pending",
-            message: `${userName} (${userEmail}) is waiting for account verification.`,
-            userEmail: userEmail,
-            userName: userName,
-            read: false,
-            createdAt: serverTimestamp(),
-          })
-        );
-      });
-
-      await Promise.all(notifications);
-      console.log(`Notified ${notifications.length} admin(s) about pending user: ${userEmail}`);
-    } catch (error) {
-      console.error("Error notifying admins:", error);
-    }
-  };
-
-  const handleResendVerification = async () => {
-    if (resendCooldown > 0) return;
-
-    try {
-      setLoading(true);
-      setError("");
-      
-      // Get the user's name from Firestore
-      const usersRef = collection(db, "users");
-      const userQuery = query(usersRef, where("email", "==", pendingUserEmail));
-      const userSnapshot = await getDocs(userQuery);
-      
-      let userName = "User";
-      if (!userSnapshot.empty) {
-        const userData = userSnapshot.docs[0].data();
-        userName = userData.name || userData.displayName || "User";
-      }
-      
-      // Notify admins again
-      await notifyAdminsAboutPendingUser(pendingUserEmail, userName);
-      
-      setSuccess("Verification reminder sent to administrators!");
-      setResendCooldown(60); // 60 second cooldown
-    } catch (error) {
-      console.error("Resend error:", error);
-      setError("Failed to send verification reminder. Please try again later.");
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleLogin = async (e) => {
@@ -202,14 +125,11 @@ const Login = ({ onNavigate, onUserLogin }) => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
-        // Check if account is verified by admin
+        // Check if account is verified by admin (NO EMAIL VERIFICATION CHECK)
         if (!userData.emailVerifiedByAdmin || userData.accountStatus !== "active") {
           await auth.signOut();
           setPendingVerification(true);
           setPendingUserEmail(userData.email);
-          
-          // Notify admins about the pending verification
-          await notifyAdminsAboutPendingUser(userData.email, userData.name || userData.displayName || "User");
           
           setError("Your account is pending admin verification. Please wait for an administrator to approve your account.");
           setLoading(false);
@@ -276,9 +196,6 @@ const Login = ({ onNavigate, onUserLogin }) => {
         await auth.signOut();
         setPendingVerification(true);
         setPendingUserEmail(user.email);
-        
-        // Notify admins about new pending user
-        await notifyAdminsAboutPendingUser(user.email, user.displayName || "New User");
         
         setError("Your account is pending admin verification. Please wait for an administrator to approve your account.");
         setLoading(false);
@@ -362,21 +279,11 @@ const Login = ({ onNavigate, onUserLogin }) => {
               <AlertCircle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-300 mb-1">
-                  Account Pending Verification
+                  Account Pending Admin Verification
                 </h3>
-                <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-3">
-                  Your account requires administrator verification before you can access the system. An administrator will review and approve your account. You will be notified once verified.
+                <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                  Your account requires administrator approval before you can access the system. An administrator will review and approve your account shortly. You will be able to log in once verified.
                 </p>
-                <button
-                  onClick={handleResendVerification}
-                  disabled={loading || resendCooldown > 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  <Mail size={16} />
-                  {resendCooldown > 0 
-                    ? `Resend in ${resendCooldown}s` 
-                    : "Remind Admins"}
-                </button>
               </div>
             </div>
           </div>

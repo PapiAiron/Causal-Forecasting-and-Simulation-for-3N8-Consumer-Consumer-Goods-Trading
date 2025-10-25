@@ -17,17 +17,14 @@ import {
   UserPlus,
   Calendar
 } from 'lucide-react';
-import { auth, db } from "../firebase"; // Add this import
-import { doc, getDoc } from "firebase/firestore"; // Add this import
+import { auth, db } from "../firebase";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
 
-
-// Modern Sidebar Component - Completely Hidden by Default
-// Update the Sidebar component in DashboardHome
 const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
   const { theme } = useTheme();
-  const [userRole, setUserRole] = useState('user');
+  const [userRole, setUserRole] = useState('staff');
   
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -35,21 +32,22 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
       if (user) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
-          setUserRole(userDoc.data().role || 'user');
+          setUserRole(userDoc.data().role || 'staff');
         }
       }
     };
     fetchUserRole();
   }, []);
   
-    
+  // Navigation items with role-based access
   const navigationItems = [
-    { id: 'home', label: 'Dashboard', icon: Home, roles: ['admin', 'staff'] },
-    { id: 'overview', label: 'Overview', icon: BarChart3, roles: ['admin', 'staff'] },
-    { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp, roles: ['admin', 'staff'] },
-    { id: 'simulation', label: 'Simulation', icon: Play, roles: ['admin', 'staff'] },
-    { id: 'manage-accounts', label: 'Manage Accounts', icon: UserPlus, roles: ['admin', 'staff'] },
+    { id: 'home', label: 'Dashboard', icon: Home, roles: ['admin', 'staff', 'user'] },
+    { id: 'overview', label: 'Overview', icon: BarChart3, roles: ['admin', 'staff', 'user'] },
+    { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp, roles: ['admin', 'staff', 'user'] },
+    { id: 'simulation', label: 'Simulation', icon: Play, roles: ['admin', 'staff', 'user'] },
+    { id: 'manage-accounts', label: 'Manage Accounts', icon: UserPlus, roles: ['admin'] }, // ONLY ADMIN
   ];
+  
   // Filter navigation based on user role
   const filteredNav = navigationItems.filter(item => 
     item.roles.includes(userRole)
@@ -157,10 +155,23 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
   );
 };
 
-
 const ProfileDropdown = ({ onNavigate }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [userRole, setUserRole] = useState('staff');
   const { theme } = useTheme();
+
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setUserRole(userDoc.data().role || 'staff');
+        }
+      }
+    };
+    fetchUserRole();
+  }, []);
 
   const handleNavigation = (page) => {
     if (onNavigate) {
@@ -188,7 +199,7 @@ const ProfileDropdown = ({ onNavigate }) => {
           <p className="text-sm font-semibold text-gray-900 dark:text-white">
             {auth.currentUser?.displayName || 'User'}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Administrator</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{userRole}</p>
         </div>
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -219,8 +230,12 @@ const ProfileDropdown = ({ onNavigate }) => {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {auth.currentUser?.email || 'user@company.com'}
                   </p>
-                  <span className="inline-block text-xs font-medium px-2.5 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full mt-2">
-                    Administrator
+                  <span className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full mt-2 ${
+                    userRole === 'admin' 
+                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                  }`}>
+                    {userRole === 'admin' ? 'Administrator' : 'Staff'}
                   </span>
                 </div>
               </div>
@@ -229,7 +244,6 @@ const ProfileDropdown = ({ onNavigate }) => {
             <div className="py-2">
               {[
                 { icon: User, label: 'View Profile', action: 'profile' },
-                // { icon: Settings, label: 'Account Settings', action: 'accountsettings' },
                 { icon: HelpCircle, label: 'Help & Support', action: 'support' },
                 { icon: Info, label: 'About Us', action: 'about' }
               ].map((item, index) => (
@@ -261,7 +275,6 @@ const ProfileDropdown = ({ onNavigate }) => {
                 <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-medium">Sign Out</span>
               </button>
-
             </div>
           </div>
         </>
@@ -271,8 +284,51 @@ const ProfileDropdown = ({ onNavigate }) => {
 };
 
 const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
-  const [notifications] = useState(3);
+  const [notifications, setNotifications] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [userRole, setUserRole] = useState('staff');
   const { theme } = useTheme();
+
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setUserRole(userDoc.data().role || 'staff');
+        }
+      }
+    };
+    fetchUserRole();
+  }, []);
+
+  useEffect(() => {
+    // Only fetch pending users if user is admin
+    if (userRole !== 'admin') return;
+
+    const fetchPendingUsers = async () => {
+      try {
+        const usersRef = collection(db, "users");
+        const pendingQuery = query(usersRef, where("accountStatus", "==", "pending"));
+        const snapshot = await getDocs(pendingQuery);
+        
+        const pending = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        setPendingUsers(pending);
+        setNotifications(pending.length);
+      } catch (error) {
+        console.error("Error fetching pending users:", error);
+      }
+    };
+
+    fetchPendingUsers();
+    const interval = setInterval(fetchPendingUsers, 30000);
+    return () => clearInterval(interval);
+  }, [userRole]);
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 z-30">
@@ -302,17 +358,89 @@ const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
-            <button className="relative p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 rounded-xl sm:rounded-2xl hover:bg-gray-100/70 dark:hover:bg-gray-800/70 hover:scale-105 active:scale-95 hidden xs:block">
-              <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-              {notifications > 0 && (
-                <span 
-                  className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 text-xs text-white rounded-full flex items-center justify-center shadow-lg"
-                  style={{ backgroundColor: theme.chart }}
+            {/* Only show notification bell for admins */}
+            {userRole === 'admin' && (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 rounded-xl sm:rounded-2xl hover:bg-gray-100/70 dark:hover:bg-gray-800/70 hover:scale-105 active:scale-95"
                 >
-                  {notifications}
-                </span>
-              )}
-            </button>
+                  <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {notifications > 0 && (
+                    <span 
+                      className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 text-xs text-white rounded-full flex items-center justify-center shadow-lg"
+                      style={{ backgroundColor: theme.chart }}
+                    >
+                      {notifications}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowNotifications(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-3 w-80 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 z-50 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200/30 dark:border-gray-700/30">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          Pending Verifications
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {notifications} user{notifications !== 1 ? 's' : ''} awaiting approval
+                        </p>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto">
+                        {pendingUsers.length === 0 ? (
+                          <div className="p-6 text-center text-gray-500 dark:text-gray-400">
+                            No pending verifications
+                          </div>
+                        ) : (
+                          pendingUsers.map((user) => (
+                            <div key={user.id} className="p-4 border-b border-gray-200/30 dark:border-gray-700/30 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                              <div className="flex items-start space-x-3">
+                                <div 
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
+                                  style={{ backgroundColor: theme.chart }}
+                                >
+                                  {user.name?.charAt(0).toUpperCase() || 'U'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                    {user.name}
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                    {user.email}
+                                  </p>
+                                  <span className="inline-block text-xs font-medium px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full mt-1">
+                                    {user.role}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {pendingUsers.length > 0 && (
+                        <div className="p-4 border-t border-gray-200/30 dark:border-gray-700/30">
+                          <button
+                            onClick={() => {
+                              setShowNotifications(false);
+                              onNavigate('manage-accounts');
+                            }}
+                            className="w-full py-2 px-4 text-white rounded-lg text-sm font-medium hover:opacity-90 transition"
+                            style={{ backgroundColor: theme.chart }}
+                          >
+                            View All in Manage Accounts
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             
             <ProfileDropdown onNavigate={onNavigate} />
           </div>
@@ -349,8 +477,6 @@ const DashboardContent = ({ onNavigate }) => {
     }
   ];
 
-
-
   return (
     <div className="pt-24">
       <Header
@@ -360,8 +486,6 @@ const DashboardContent = ({ onNavigate }) => {
       />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {dashboardCards.map((card) => {
             const IconComponent = card.icon;

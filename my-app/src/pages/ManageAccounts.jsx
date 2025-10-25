@@ -19,7 +19,7 @@ import {
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
 import { LayoutWrapper } from './DashboardHome';
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { 
   collection, 
   getDocs, 
@@ -28,7 +28,8 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy 
+  orderBy,
+  serverTimestamp 
 } from "firebase/firestore";
 
 const ManageAccounts = ({ onNavigate }) => {
@@ -41,10 +42,12 @@ const ManageAccounts = ({ onNavigate }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [editForm, setEditForm] = useState({
     role: '',
-    accountStatus: '',
-    emailVerified: false
+    accountStatus: ''
   });
 
   useEffect(() => {
@@ -75,9 +78,8 @@ const ManageAccounts = ({ onNavigate }) => {
   const handleEditUser = (user) => {
     setSelectedUser(user);
     setEditForm({
-      role: user.role || 'user',
-      accountStatus: user.accountStatus || 'active',
-      emailVerified: user.emailVerified || false
+      role: user.role || 'staff',
+      accountStatus: user.accountStatus || 'active'
     });
     setShowEditModal(true);
   };
@@ -90,12 +92,13 @@ const ManageAccounts = ({ onNavigate }) => {
       await updateDoc(userRef, {
         role: editForm.role,
         accountStatus: editForm.accountStatus,
-        emailVerified: editForm.emailVerified
+        updatedAt: serverTimestamp()
       });
 
       await fetchUsers();
       setShowEditModal(false);
       setSelectedUser(null);
+      alert("User updated successfully!");
     } catch (error) {
       console.error("Error updating user:", error);
       alert("Failed to update user");
@@ -110,9 +113,59 @@ const ManageAccounts = ({ onNavigate }) => {
       await fetchUsers();
       setShowDeleteModal(false);
       setSelectedUser(null);
+      alert("User deleted successfully!");
     } catch (error) {
       console.error("Error deleting user:", error);
       alert("Failed to delete user");
+    }
+  };
+
+  const handleApproveUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const userRef = doc(db, "users", selectedUser.id);
+      await updateDoc(userRef, {
+        accountStatus: 'active',
+        emailVerifiedByAdmin: true,
+        approvedAt: serverTimestamp(),
+        approvedBy: auth.currentUser?.uid
+      });
+
+      await fetchUsers();
+      setShowVerificationModal(false);
+      setSelectedUser(null);
+      alert("User approved successfully!");
+    } catch (error) {
+      console.error("Error approving user:", error);
+      alert("Failed to approve user");
+    }
+  };
+
+  const handleRejectUser = async () => {
+    if (!selectedUser || !rejectionReason.trim()) {
+      alert("Please provide a reason for rejection");
+      return;
+    }
+
+    try {
+      const userRef = doc(db, "users", selectedUser.id);
+      await updateDoc(userRef, {
+        accountStatus: 'rejected',
+        emailVerifiedByAdmin: false,
+        rejectionReason: rejectionReason.trim(),
+        rejectedAt: serverTimestamp(),
+        rejectedBy: auth.currentUser?.uid
+      });
+
+      await fetchUsers();
+      setShowRejectModal(false);
+      setSelectedUser(null);
+      setRejectionReason('');
+      alert("User rejected successfully!");
+    } catch (error) {
+      console.error("Error rejecting user:", error);
+      alert("Failed to reject user");
     }
   };
 
@@ -127,6 +180,8 @@ const ManageAccounts = ({ onNavigate }) => {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
+  const pendingUsers = users.filter(user => user.accountStatus === 'pending');
+
   const getRoleColor = (role) => {
     switch(role) {
       case 'admin': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
@@ -138,8 +193,10 @@ const ManageAccounts = ({ onNavigate }) => {
   const getStatusColor = (status) => {
     switch(status) {
       case 'active': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-      case 'suspended': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+      case 'pending': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+      case 'suspended': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
       case 'disabled': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+      case 'rejected': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
       default: return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
     }
   };
@@ -154,8 +211,74 @@ const ManageAccounts = ({ onNavigate }) => {
         />
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Pending Verifications Alert */}
+          {pendingUsers.length > 0 && (
+            <Card className="p-6 mb-6 border-2 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-orange-500 rounded-xl">
+                  <UserCheck className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-orange-900 dark:text-orange-200 mb-2">
+                    Pending User Verifications
+                  </h3>
+                  <p className="text-sm text-orange-700 dark:text-orange-300 mb-4">
+                    {pendingUsers.length} user{pendingUsers.length !== 1 ? 's' : ''} awaiting admin approval
+                  </p>
+                  <div className="space-y-3">
+                    {pendingUsers.map((user) => (
+                      <div key={user.id} className="bg-white dark:bg-gray-800 rounded-lg p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold"
+                            style={{ backgroundColor: theme.chart }}
+                          >
+                            {user.name?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {user.name || 'Unnamed User'}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {user.email}
+                            </p>
+                            <span className="inline-block text-xs font-medium px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full mt-1">
+                              {user.role || 'staff'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowVerificationModal(true);
+                            }}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowRejectModal(true);
+                            }}
+                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <Card className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -187,6 +310,18 @@ const ManageAccounts = ({ onNavigate }) => {
                   </p>
                 </div>
                 <UserCheck className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              </div>
+            </Card>
+            
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Pending</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                    {users.filter(u => u.accountStatus === 'pending').length}
+                  </p>
+                </div>
+                <UserX className="w-8 h-8 text-orange-600 dark:text-orange-400" />
               </div>
             </Card>
             
@@ -226,7 +361,6 @@ const ManageAccounts = ({ onNavigate }) => {
                 <option value="all">All Roles</option>
                 <option value="admin">Admin</option>
                 <option value="staff">Staff</option>
-                <option value="user">User</option>
               </select>
               
               <select
@@ -235,9 +369,11 @@ const ManageAccounts = ({ onNavigate }) => {
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               >
                 <option value="all">All Status</option>
+                <option value="pending">Pending</option>
                 <option value="active">Active</option>
                 <option value="suspended">Suspended</option>
                 <option value="disabled">Disabled</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
           </Card>
@@ -261,7 +397,7 @@ const ManageAccounts = ({ onNavigate }) => {
                         Status
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Verified
+                        Created
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Last Login
@@ -294,7 +430,7 @@ const ManageAccounts = ({ onNavigate }) => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleColor(user.role)}`}>
-                            {user.role || 'user'}
+                            {user.role || 'staff'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -302,12 +438,8 @@ const ManageAccounts = ({ onNavigate }) => {
                             {user.accountStatus || 'active'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {user.emailVerified ? (
-                            <CheckCircle className="w-5 h-5 text-green-500" />
-                          ) : (
-                            <XCircle className="w-5 h-5 text-red-500" />
-                          )}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
@@ -356,9 +488,9 @@ const ManageAccounts = ({ onNavigate }) => {
                   <select
                     value={editForm.role}
                     onChange={(e) => setEditForm({...editForm, role: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2"
+                    style={{ '--tw-ring-color': theme.chart + '40' }}
                   >
-                    <option value="user">User</option>
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
                   </select>
@@ -371,37 +503,30 @@ const ManageAccounts = ({ onNavigate }) => {
                   <select
                     value={editForm.accountStatus}
                     onChange={(e) => setEditForm({...editForm, accountStatus: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2"
+                    style={{ '--tw-ring-color': theme.chart + '40' }}
                   >
                     <option value="active">Active</option>
+                    <option value="pending">Pending</option>
                     <option value="suspended">Suspended</option>
                     <option value="disabled">Disabled</option>
                   </select>
                 </div>
-                
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={editForm.emailVerified}
-                    onChange={(e) => setEditForm({...editForm, emailVerified: e.target.checked})}
-                    className="mr-2"
-                  />
-                  <label className="text-sm text-gray-700 dark:text-gray-300">
-                    Email Verified
-                  </label>
-                </div>
               </div>
-              
+
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={handleSaveEdit}
-                  className="flex-1 px-4 py-2 text-white rounded-lg"
+                  className="flex-1 px-4 py-2 text-white rounded-lg font-medium hover:opacity-90 transition"
                   style={{ backgroundColor: theme.chart }}
                 >
                   Save Changes
                 </button>
                 <button
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedUser(null);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Cancel
@@ -411,7 +536,7 @@ const ManageAccounts = ({ onNavigate }) => {
           </div>
         )}
 
-        {/* Delete Modal */}
+        {/* Delete Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <Card className="max-w-md w-full p-6">
@@ -421,16 +546,95 @@ const ManageAccounts = ({ onNavigate }) => {
               <p className="text-gray-600 dark:text-gray-400 mb-6">
                 Are you sure you want to delete <strong>{selectedUser?.name}</strong>? This action cannot be undone.
               </p>
-              
               <div className="flex gap-3">
                 <button
                   onClick={handleDeleteUser}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
                 >
                   Delete
                 </button>
                 <button
-                  onClick={() => setShowDeleteModal(false)}
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Approve Verification Modal */}
+        {showVerificationModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <Card className="max-w-md w-full p-6">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                Approve User
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Are you sure you want to approve <strong>{selectedUser?.name}</strong> ({selectedUser?.email})?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleApproveUser}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => {
+                    setShowVerificationModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Reject Modal */}
+        {showRejectModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <Card className="max-w-md w-full p-6">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                Reject User
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Rejecting <strong>{selectedUser?.name}</strong> ({selectedUser?.email})
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Reason for Rejection *
+                </label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Please provide a reason for rejecting this account..."
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 dark:bg-gray-700 dark:text-white"
+                  style={{ '--tw-ring-color': theme.chart + '40' }}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleRejectUser}
+                  disabled={!rejectionReason.trim()}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  Reject Account
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setSelectedUser(null);
+                    setRejectionReason('');
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Cancel

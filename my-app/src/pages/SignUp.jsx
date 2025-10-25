@@ -4,10 +4,9 @@ import { auth, db } from "../firebase";
 import { Eye, EyeOff } from "lucide-react";
 import {
   createUserWithEmailAndPassword,
-  sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 const SignUp = ({ onNavigate }) => {
   const { theme } = useTheme();
@@ -15,7 +14,7 @@ const SignUp = ({ onNavigate }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("staff"); // Default to staff instead of user
+  const [role, setRole] = useState("staff");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -90,40 +89,6 @@ const SignUp = ({ onNavigate }) => {
     }
   };
 
-  // Function to send notification to all admins
-  const notifyAdmins = async (newUser) => {
-    try {
-      const usersRef = collection(db, "users");
-      const adminQuery = query(usersRef, where("role", "==", "admin"));
-      const adminSnapshot = await getDocs(adminQuery);
-      
-      // Create notification for each admin
-      const notifications = [];
-      adminSnapshot.forEach((adminDoc) => {
-        notifications.push(
-          setDoc(doc(collection(db, "notifications")), {
-            recipientId: adminDoc.id,
-            type: "new_registration",
-            title: "New User Registration",
-            message: `${newUser.name} (${newUser.email}) has registered as ${newUser.role} and is awaiting verification.`,
-            userId: newUser.uid,
-            userName: newUser.name,
-            userEmail: newUser.email,
-            userRole: newUser.role,
-            read: false,
-            createdAt: serverTimestamp()
-          })
-        );
-      });
-
-      await Promise.all(notifications);
-      console.log("Admin notifications sent successfully");
-    } catch (error) {
-      console.error("Error notifying admins:", error);
-      // Don't fail signup if notification fails
-    }
-  };
-
   const handleSignup = async (e) => {
     e.preventDefault();
     setError("");
@@ -189,12 +154,6 @@ const SignUp = ({ onNavigate }) => {
       // Add display name to Firebase Auth
       await updateProfile(user, { displayName: name.trim() });
 
-      // Send verification email BEFORE sign out
-      await sendEmailVerification(user, {
-        url: window.location.origin + "/login",
-        handleCodeInApp: true,
-      });
-
       // Get permissions based on selected role
       const getPermissionsByRole = (role) => {
         if (role === 'admin') {
@@ -205,7 +164,7 @@ const SignUp = ({ onNavigate }) => {
             canDeleteUsers: true,
             canViewAllData: true
           };
-        } else { // staff
+        } else {
           return {
             canViewAnalytics: true,
             canEditUsers: true,
@@ -216,17 +175,15 @@ const SignUp = ({ onNavigate }) => {
         }
       };
 
-      // Save user profile in Firestore with role system (NO USER ROLE)
-      // Save user profile in Firestore with role system (NO USER ROLE)
+      // Save user profile in Firestore with pending status (NO EMAIL VERIFICATION REQUIRED)
       const newUserData = {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         createdAt: serverTimestamp(),
-        emailVerified: false,
-        emailVerifiedByAdmin: false, // Added to match login requirements
-        role: role, // Either 'staff' or 'admin'
+        emailVerifiedByAdmin: false, // Admin will verify directly in the web app
+        role: role,
         loginCount: 0,
-        accountStatus: "pending", // Changed from "active" to "pending" to require admin approval
+        accountStatus: "pending", // Requires admin approval
         profile: {
           displayName: name.trim(),
           photoURL: null,
@@ -240,19 +197,11 @@ const SignUp = ({ onNavigate }) => {
 
       await setDoc(doc(db, "users", user.uid), newUserData);
 
-      // Notify all admins about new registration
-      await notifyAdmins({
-        uid: user.uid,
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        role: role
-      });
-
-      // Sign out user until they verify email
+      // Sign out user until admin approves
       await auth.signOut();
 
       setSuccess(
-        `Account created successfully as ${role === 'admin' ? 'Administrator' : 'Staff'}! Admins have been notified. Please check your email to verify your account before logging in.`
+        `Account created successfully as ${role === 'admin' ? 'Administrator' : 'Staff'}! Please wait for an administrator to verify your account before logging in.`
       );
       
       // Clear form
@@ -302,18 +251,16 @@ const SignUp = ({ onNavigate }) => {
           </div>
         )}
 
-        <form onSubmit={handleSignup} className="space-y-5">
+        <div className="space-y-5">
           <div>
             <input
               type="text"
               placeholder="Full Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              required
               disabled={loading}
               maxLength={50}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-opacity-50 dark:bg-gray-700 dark:text-white disabled:opacity-50"
-              style={{ focusRingColor: theme.chart }}
             />
           </div>
 
@@ -323,14 +270,11 @@ const SignUp = ({ onNavigate }) => {
               placeholder="Email Address"
               value={email}
               onChange={(e) => setEmail(e.target.value.trim())}
-              required
               disabled={loading}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-opacity-50 dark:bg-gray-700 dark:text-white disabled:opacity-50"
-              style={{ focusRingColor: theme.chart }}
             />
           </div>
 
-          {/* Role Selection - ONLY STAFF AND ADMIN */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Select Role
@@ -340,7 +284,6 @@ const SignUp = ({ onNavigate }) => {
               onChange={(e) => setRole(e.target.value)}
               disabled={loading}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-opacity-50 dark:bg-gray-700 dark:text-white disabled:opacity-50"
-              style={{ focusRingColor: theme.chart }}
             >
               <option value="staff">Staff</option>
               <option value="admin">Administrator</option>
@@ -359,11 +302,9 @@ const SignUp = ({ onNavigate }) => {
                 placeholder="Create Password"
                 value={password}
                 onChange={(e) => handlePasswordChange(e.target.value)}
-                required
                 minLength={6}
                 disabled={loading}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-opacity-50 dark:bg-gray-700 dark:text-white disabled:opacity-50"
-                style={{ focusRingColor: theme.chart }}
               />
               <button
                 type="button"
@@ -390,10 +331,8 @@ const SignUp = ({ onNavigate }) => {
               placeholder="Confirm Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              required
               disabled={loading}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-opacity-50 dark:bg-gray-700 dark:text-white disabled:opacity-50"
-              style={{ focusRingColor: theme.chart }}
             />
             <button
               type="button"
@@ -406,14 +345,14 @@ const SignUp = ({ onNavigate }) => {
           </div>
 
           <button
-            type="submit"
+            onClick={handleSignup}
             disabled={loading}
             className="w-full text-white py-2 rounded-lg shadow-md hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ backgroundColor: theme.chart }}
           >
             {loading ? "Creating Account..." : "Sign Up"}
           </button>
-        </form>
+        </div>
 
         <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
           Already have an account?{" "}

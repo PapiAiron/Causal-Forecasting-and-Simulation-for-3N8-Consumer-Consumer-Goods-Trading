@@ -32,7 +32,7 @@ import {
   serverTimestamp 
 } from "firebase/firestore";
 
-const ManageAccounts = ({ onNavigate }) => {
+const ManageAccounts = ({ onNavigate, onBack}) => {
   const { theme } = useTheme();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -208,6 +208,7 @@ const ManageAccounts = ({ onNavigate }) => {
           title="Manage Accounts"
           description="View and manage all user accounts in the system"
           icon={Users}
+          onBack={onBack}
         />
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

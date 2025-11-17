@@ -16,7 +16,7 @@ import GetStarted from "./pages/GetStarted";
 import ManageAccounts from "./pages/ManageAccounts";
 import AdminUserVerification from "./pages/AdminUserVerification";
 import SettingsPage from "./pages/SettingsPage";
-import AppearanceSettings from "./pages/AppearanceSettings"; // NEW: Appearance Settings page
+import AppearanceSettings from "./pages/AppearanceSettings";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState(() => {
@@ -26,6 +26,12 @@ const App = () => {
   const [userRole, setUserRole] = useState(null);
   const [accountStatus, setAccountStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // Navigation history for back button
+  const [history, setHistory] = useState(() => {
+    const savedHistory = sessionStorage.getItem("navigationHistory");
+    return savedHistory ? JSON.parse(savedHistory) : ["getstarted"];
+  });
 
   // Listen for auth state changes and fetch user role
   useEffect(() => {
@@ -82,14 +88,34 @@ const App = () => {
     }
   }, [currentPage]);
 
+  // Save navigation history to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("navigationHistory", JSON.stringify(history));
+  }, [history]);
+
   const handleNavigation = (page) => {
     // Check if navigating to admin pages and user has permission
     if ((page === "manage-accounts" || page === "user-verification") && userRole !== "admin") {
       alert("Access Denied: You need admin privileges to access this page.");
       return;
     }
+    
+    // Add to history and navigate
+    setHistory([...history, page]);
     setCurrentPage(page);
   };
+
+  const handleGoBack = () => {
+    if (history.length > 1) {
+      const newHistory = history.slice(0, -1);
+      setHistory(newHistory);
+      setCurrentPage(newHistory[newHistory.length - 1]);
+    }
+  };
+
+  // Determine if back button should be shown
+  const canGoBack = history.length > 1;
+  const onBack = canGoBack ? handleGoBack : null;
 
   // Show loading screen while checking auth
   if (loading) {
@@ -111,7 +137,7 @@ const App = () => {
     "causal-analysis", 
     "simulation",
     "settings",
-    "appearance", // NEW: Added appearance to protected pages
+    "appearance",
     "profile", 
     "accountsettings",
     "manage-accounts",
@@ -195,19 +221,19 @@ const App = () => {
     <ThemeProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-sans">
         {currentPage === "getstarted" && <GetStarted onNavigate={handleNavigation} />}
-        {currentPage === "home" && <DashboardHome onNavigate={handleNavigation} />}
-        {currentPage === "causal-analysis" && <CausalAnalysis onNavigate={handleNavigation} />}
-        {currentPage === "simulation" && <Simulation onNavigate={handleNavigation} />}
-        {currentPage === "settings" && <SettingsPage onNavigate={handleNavigation} />}
-        {currentPage === "appearance" && <AppearanceSettings onNavigate={handleNavigation} />}
-        {currentPage === "profile" && <Profile onNavigate={handleNavigation} />}
-        {currentPage === "support" && <Support onNavigate={handleNavigation} />}
-        {currentPage === "about" && <AboutUs onNavigate={handleNavigation} />}
+        {currentPage === "home" && <DashboardHome onNavigate={handleNavigation} onBack={null} />}
+        {currentPage === "causal-analysis" && <CausalAnalysis onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "simulation" && <Simulation onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "settings" && <SettingsPage onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "appearance" && <AppearanceSettings onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "profile" && <Profile onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "support" && <Support onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "about" && <AboutUs onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "login" && <Login onNavigate={handleNavigation} />}
         {currentPage === "signup" && <SignUp onNavigate={handleNavigation} />}
-        {currentPage === "accountsettings" && <AccountSettings onNavigate={handleNavigation} />}
-        {currentPage === "manage-accounts" && <ManageAccounts onNavigate={handleNavigation} />}
-        {currentPage === "user-verification" && <AdminUserVerification onNavigate={handleNavigation} />}
+        {currentPage === "accountsettings" && <AccountSettings onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "manage-accounts" && <ManageAccounts onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "user-verification" && <AdminUserVerification onNavigate={handleNavigation} onBack={onBack} />}
       </div>
     </ThemeProvider>
   );

@@ -4,7 +4,7 @@ import { Card, Header } from "../components/SharedComponents";
 import { LayoutWrapper } from './DashboardHome';  
 import { Info } from "lucide-react";
 
-const AboutUs = ({ onNavigate }) => {
+const AboutUs = ({ onNavigate, onBack }) => {
   return (
     <LayoutWrapper currentPage="about" onNavigate={onNavigate}>
       <div className="pt-24">
@@ -12,6 +12,7 @@ const AboutUs = ({ onNavigate }) => {
           title="About Us"
           description="Learn more about the team and purpose behind this system."
           icon={Info}
+          onBack={onBack}
         />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

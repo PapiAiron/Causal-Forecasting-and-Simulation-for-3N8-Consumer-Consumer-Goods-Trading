@@ -4,7 +4,7 @@ import { Settings, Moon, Sun, Palette, Check, User, Lock, Bell, ChevronRight } f
 import { useTheme } from '../components/ThemeContext';
 import { Card, Header } from '../components/SharedComponents';
 
-const SettingsPage = ({ onNavigate }) => {
+const SettingsPage = ({ onNavigate, onBack }) => {
   const { theme, darkMode, setDarkMode, currentTheme, setCurrentTheme, themes } = useTheme();
 
   return (
@@ -14,6 +14,7 @@ const SettingsPage = ({ onNavigate }) => {
           title="Settings"
           description="Customize your dashboard appearance and manage your account"
           icon={Settings}
+          onBack={onBack}
         />
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

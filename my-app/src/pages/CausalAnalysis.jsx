@@ -16,7 +16,7 @@ import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
 import { LayoutWrapper } from './DashboardHome';
 
-const CausalAnalysis = ({ onNavigate }) => {
+const CausalAnalysis = ({ onNavigate, onBack }) => {
   const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -283,7 +283,10 @@ const CausalAnalysis = ({ onNavigate }) => {
   return (
     <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
       <div className="pt-24">
-        <Header title="Causal Analysis & Events" description="Factor Impact, Event Planning & Advanced Forecasting for Beverage Sales" icon={TrendingUp} />
+        <Header title="Causal Analysis & Events" 
+        description="Factor Impact, Event Planning & Advanced Forecasting for Beverage Sales" 
+        icon={TrendingUp}
+        onBack={onBack} />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="space-y-6">
             

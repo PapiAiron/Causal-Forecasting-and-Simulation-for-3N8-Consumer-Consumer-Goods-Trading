@@ -4,7 +4,7 @@ import { Palette, Moon, Sun, Check, ArrowLeft, Sparkles } from 'lucide-react';
 import { useTheme } from '../components/ThemeContext';
 import { Card, Header } from '../components/SharedComponents';
 
-const AppearanceSettings = ({ onNavigate }) => {
+const AppearanceSettings = ({ onNavigate, onBack}) => {
   const { theme, darkMode, setDarkMode, currentTheme, setCurrentTheme, themes } = useTheme();
 
   return (
@@ -16,6 +16,7 @@ const AppearanceSettings = ({ onNavigate }) => {
           title="Appearance"
           description="Customize how your dashboard looks and feels"
           icon={Palette}
+          onBack={onBack}
         />
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

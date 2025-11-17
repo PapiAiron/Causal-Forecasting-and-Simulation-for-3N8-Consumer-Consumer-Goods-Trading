@@ -6,7 +6,7 @@ import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useTheme } from "../components/ThemeContext";
 
-const Profile = ({ onNavigate }) => {
+const Profile = ({ onNavigate, onBack }) => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
@@ -133,6 +133,7 @@ const Profile = ({ onNavigate }) => {
           title="Your Profile"
           description="View your account information and preferences"
           icon={User}
+          onBack={onBack}
         />
 
         <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

@@ -18,7 +18,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 
-const AccountSettings = ({ onNavigate }) => {
+const AccountSettings = ({ onNavigate, onBack }) => {
   const { theme, darkMode, toggleDarkMode, colorTheme, setColorTheme } = useTheme();
   
   const [loading, setLoading] = useState(true);
@@ -266,6 +266,7 @@ const AccountSettings = ({ onNavigate }) => {
           title="Account Settings"
           description="Manage your account preferences and security settings"
           icon={Settings}
+          onBack={onBack}
         />
         
         <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

@@ -14,7 +14,7 @@ import {
 import { Card, Header } from "../components/SharedComponents";
 import { LayoutWrapper } from './DashboardHome';
 
-const Simulation = ({ onNavigate }) => {
+const Simulation = ({ onNavigate, onBack }) => {
   const [simulation, setSimulation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -103,6 +103,7 @@ const Simulation = ({ onNavigate }) => {
           title="Inventory Simulation"
           description="Industry-standard continuous review (Q, r) inventory policy simulation with dynamic replenishment."
           icon={Activity}
+          onBack={onBack}
         />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

@@ -4,7 +4,6 @@ import { auth, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import DashboardHome from "./pages/DashboardHome";
-import Overview from "./pages/Overview";
 import CausalAnalysis from "./pages/CausalAnalysis";
 import Simulation from "./pages/Simulation";
 import Profile from "./pages/Profile";
@@ -16,6 +15,8 @@ import AccountSettings from "./pages/AccountSettings";
 import GetStarted from "./pages/GetStarted";
 import ManageAccounts from "./pages/ManageAccounts";
 import AdminUserVerification from "./pages/AdminUserVerification";
+import SettingsPage from "./pages/SettingsPage";
+import AppearanceSettings from "./pages/AppearanceSettings"; // NEW: Appearance Settings page
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState(() => {
@@ -107,9 +108,10 @@ const App = () => {
   // Protected pages that require authentication
   const protectedPages = [
     "home", 
-    "overview", 
     "causal-analysis", 
-    "simulation", 
+    "simulation",
+    "settings",
+    "appearance", // NEW: Added appearance to protected pages
     "profile", 
     "accountsettings",
     "manage-accounts",
@@ -194,9 +196,10 @@ const App = () => {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-sans">
         {currentPage === "getstarted" && <GetStarted onNavigate={handleNavigation} />}
         {currentPage === "home" && <DashboardHome onNavigate={handleNavigation} />}
-        {currentPage === "overview" && <Overview onNavigate={handleNavigation} />}
         {currentPage === "causal-analysis" && <CausalAnalysis onNavigate={handleNavigation} />}
         {currentPage === "simulation" && <Simulation onNavigate={handleNavigation} />}
+        {currentPage === "settings" && <SettingsPage onNavigate={handleNavigation} />}
+        {currentPage === "appearance" && <AppearanceSettings onNavigate={handleNavigation} />}
         {currentPage === "profile" && <Profile onNavigate={handleNavigation} />}
         {currentPage === "support" && <Support onNavigate={handleNavigation} />}
         {currentPage === "about" && <AboutUs onNavigate={handleNavigation} />}

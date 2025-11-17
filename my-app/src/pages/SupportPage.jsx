@@ -4,7 +4,7 @@ import { LayoutWrapper } from './DashboardHome';
 import { Card, Header } from '../components/SharedComponents';
 import { useTheme } from '../components/ThemeContext';
 
-const Support = ({ onNavigate }) => {
+const Support = ({ onNavigate, onBack }) => {
   const { theme } = useTheme();
 
   return (
@@ -14,6 +14,7 @@ const Support = ({ onNavigate }) => {
           title="Help & Support"
           description="Get assistance with your analytics platform"
           icon={HelpCircle}
+          onBack={onBack}
         />
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

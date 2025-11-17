@@ -42,9 +42,9 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
   // Navigation items with role-based access
   const navigationItems = [
     { id: 'home', label: 'Dashboard', icon: Home, roles: ['admin', 'staff', 'user'] },
-    { id: 'overview', label: 'Overview', icon: BarChart3, roles: ['admin', 'staff', 'user'] },
     { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp, roles: ['admin', 'staff', 'user'] },
     { id: 'simulation', label: 'Simulation', icon: Play, roles: ['admin', 'staff', 'user'] },
+    { id: 'settings', label: 'Settings', icon: Settings, roles: ['admin', 'staff', 'user'] },
     { id: 'manage-accounts', label: 'Manage Accounts', icon: UserPlus, roles: ['admin'] }, // ONLY ADMIN
   ];
   
@@ -88,17 +88,10 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
           </button>
         </div>
 
-        <div className="p-6 pb-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search pages..."
-              className="w-full pl-12 pr-4 py-3 bg-gray-50/70 dark:bg-gray-800/70 border border-gray-200/50 dark:border-gray-700/50 rounded-2xl text-sm focus:ring-2 focus:border-transparent transition-all backdrop-blur-sm"
-              style={{ '--tw-ring-color': theme.chart + '40' }}
-            />
-          </div>
+        <div className="flex items-center gap-3 w-full">
+          <div className="flex-1 h-px bg-gray-300/50 dark:bg-gray-600/50 mb-6" />
         </div>
+
 
         <div className="flex-1 px-6 py-2 overflow-y-auto max-h-[calc(100vh-300px)]">
           <nav className="space-y-2">
@@ -242,11 +235,12 @@ const ProfileDropdown = ({ onNavigate }) => {
             </div>
 
             <div className="py-2">
-              {[
-                { icon: User, label: 'View Profile', action: 'profile' },
-                { icon: HelpCircle, label: 'Help & Support', action: 'support' },
-                { icon: Info, label: 'About Us', action: 'about' }
-              ].map((item, index) => (
+                {[
+                  { icon: User, label: 'View Profile', action: 'profile' },
+                  { icon: Settings, label: 'Settings', action: 'settings' },
+                  { icon: HelpCircle, label: 'Help & Support', action: 'support' },
+                  { icon: Info, label: 'About Us', action: 'about' }
+                ].map((item, index) => (
                 <button 
                   key={index}
                   onClick={() => handleNavigation(item.action)}
@@ -453,13 +447,14 @@ const TopBar = ({ sidebarOpen, onSidebarToggle, onNavigate }) => {
 const DashboardContent = ({ onNavigate }) => {
   const { theme } = useTheme();
 
+  // UPDATED: Dashboard cards (Overview removed, Settings added)
   const dashboardCards = [
     {
-      id: 'overview',
-      title: 'Overview',
-      description: 'Key Performance Indicators & Forecasting',
-      icon: BarChart3,
-      stats: { accuracy: '92.5%', delivery: '98.2%' }
+      id: 'causal-analysis',
+      title: 'Causal Analysis',
+      description: 'Factor Impact & Correlation Analysis',
+      icon: TrendingUp,
+      stats: { factors: '6', correlation: '85%' }
     },
     {
       id: 'simulation',
@@ -469,11 +464,11 @@ const DashboardContent = ({ onNavigate }) => {
       stats: { scenarios: '4', lastRun: '2 hrs ago' }
     },
     {
-      id: 'causal-analysis',
-      title: 'Causal Analysis',
-      description: 'Factor Impact & Correlation Analysis',
-      icon: TrendingUp,
-      stats: { factors: '6', correlation: '85%' }
+      id: 'settings',
+      title: 'Settings',
+      description: 'Customize Theme & Preferences',
+      icon: Settings,
+      stats: { theme: 'Ocean Blue', mode: 'Dark' }
     }
   ];
 
@@ -507,10 +502,10 @@ const DashboardContent = ({ onNavigate }) => {
                       <IconComponent className="w-6 h-6 text-white" />
                     </div>
                     <div className="text-right">
-                      {card.id === 'overview' && (
+                      {card.id === 'causal-analysis' && (
                         <>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">Accuracy</div>
-                          <div className="font-semibold text-green-600 dark:text-green-400">{card.stats.accuracy}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">Top Factor</div>
+                          <div className="font-semibold" style={{ color: theme.chart }}>{card.stats.correlation}</div>
                         </>
                       )}
                       {card.id === 'simulation' && (
@@ -519,10 +514,10 @@ const DashboardContent = ({ onNavigate }) => {
                           <div className="font-semibold text-gray-900 dark:text-white">{card.stats.lastRun}</div>
                         </>
                       )}
-                      {card.id === 'causal-analysis' && (
+                      {card.id === 'settings' && (
                         <>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">Top Factor</div>
-                          <div className="font-semibold" style={{ color: theme.chart }}>{card.stats.correlation}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">Current Theme</div>
+                          <div className="font-semibold" style={{ color: theme.chart }}>{card.stats.theme}</div>
                         </>
                       )}
                     </div>
@@ -531,9 +526,9 @@ const DashboardContent = ({ onNavigate }) => {
                   <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">{card.description}</p>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-500 dark:text-gray-400">
-                      {card.id === 'overview' && `Delivery: ${card.stats.delivery}`}
+                      {card.id === 'causal-analysis' && `${card.stats.factors} factors analyzed`}
                       {card.id === 'simulation' && `${card.stats.scenarios} scenarios available`}
-                      {card.id === 'causal-analysis' && `${card.stats.factors} analyzed`}
+                      {card.id === 'settings' && `Mode: ${card.stats.mode}`}
                     </span>
                     <span 
                       className="font-medium group-hover:translate-x-2 transition-transform duration-300"
@@ -552,7 +547,7 @@ const DashboardContent = ({ onNavigate }) => {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Activity</h3>
           <div className="space-y-3">
             {[
-              { icon: BarChart3, title: 'Forecast model updated', desc: 'Accuracy improved to 92.5%', time: '2 hours ago' },
+              { icon: Settings, title: 'Theme updated', desc: 'Changed to Ocean Blue theme', time: '1 hour ago' },
               { icon: Play, title: 'Simulation completed', desc: 'Seasonal Peak scenario', time: '4 hours ago' },
               { icon: TrendingUp, title: 'New causal factor identified', desc: 'Marketing spend correlation', time: '1 day ago' }
             ].map((activity, index) => (

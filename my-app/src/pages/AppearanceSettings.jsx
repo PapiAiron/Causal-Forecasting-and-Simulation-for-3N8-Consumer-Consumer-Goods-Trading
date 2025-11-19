@@ -9,7 +9,7 @@ const AppearanceSettings = ({ onNavigate, onBack}) => {
 
   return (
     <LayoutWrapper currentPage="settings" onNavigate={onNavigate}>
-      <div className="pt-24">
+      <div className="pt-24 bg-gray-50 dark:bg-gray-900 min-h-screen">
       
 
         <Header

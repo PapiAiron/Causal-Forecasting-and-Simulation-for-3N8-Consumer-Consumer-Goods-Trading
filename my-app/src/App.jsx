@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import PageTransition from "./components/PageTransition";
 import { ThemeProvider } from "./components/ThemeContext";
 import { auth, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -219,7 +220,8 @@ const App = () => {
 
   return (
     <ThemeProvider>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-sans">
+      <PageTransition key={currentPage}>
+              <div className="text-gray-900 dark:text-white font-sans">
         {currentPage === "getstarted" && <GetStarted onNavigate={handleNavigation} />}
         {currentPage === "home" && <DashboardHome onNavigate={handleNavigation} onBack={null} />}
         {currentPage === "causal-analysis" && <CausalAnalysis onNavigate={handleNavigation} onBack={onBack} />}
@@ -235,6 +237,7 @@ const App = () => {
         {currentPage === "manage-accounts" && <ManageAccounts onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "user-verification" && <AdminUserVerification onNavigate={handleNavigation} onBack={onBack} />}
       </div>
+      </PageTransition>
     </ThemeProvider>
   );
 };

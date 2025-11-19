@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
 import { useTheme } from "../components/ThemeContext";
+import PageTransition from "../components/PageTransition";
 import { Eye, EyeOff, AlertCircle, Mail } from "lucide-react";
 import {
   signInWithEmailAndPassword,
@@ -265,9 +266,11 @@ const Login = ({ onNavigate, onUserLogin }) => {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  return (
+return (
+  <PageTransition>
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-8">
+
         <div className="flex justify-center mb-6">
           <img 
             src="/3N8.png" 
@@ -275,6 +278,7 @@ const Login = ({ onNavigate, onUserLogin }) => {
             className="h-16 w-auto object-contain"
           />
         </div>
+
         <h2 className="text-2xl font-semibold text-center text-gray-800 dark:text-white mb-6">
           {resetMode ? "Reset Password" : "Sign In to Your Account"}
         </h2>
@@ -288,7 +292,7 @@ const Login = ({ onNavigate, onUserLogin }) => {
                   Account Pending Admin Verification
                 </h3>
                 <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                  Your account requires administrator approval before you can access the system. An administrator will review and approve your account shortly. You will be able to log in once verified.
+                  Your account requires administrator approval before you can access the system.
                 </p>
               </div>
             </div>
@@ -300,7 +304,7 @@ const Login = ({ onNavigate, onUserLogin }) => {
             {error}
           </div>
         )}
-        
+
         {success && (
           <div className="text-green-600 text-sm mb-3 font-medium bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
             {success}
@@ -425,9 +429,12 @@ const Login = ({ onNavigate, onUserLogin }) => {
             </button>
           )}
         </div>
+
       </div>
     </div>
-  );
+  </PageTransition>
+);
+
 };
 
 export default Login;

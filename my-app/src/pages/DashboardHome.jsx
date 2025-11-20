@@ -68,7 +68,7 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
         
 <button 
   onClick={() => onTabChange('home')}
-  className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+  className="flex items-center space-x-3 hover:opacity-80 transition-opacity  mt-6 ml-6 mb-7"
 >
   <img 
     src="3N8.png" 

@@ -41,7 +41,7 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
   
   // Navigation items with role-based access
   const navigationItems = [
-    { id: 'home', label: 'Dashboard', icon: Home, roles: ['admin', 'staff', 'user'] },
+    { id: 'home', label: 'Home', icon: Home, roles: ['admin', 'staff', 'user'] },
     { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp, roles: ['admin', 'staff', 'user'] },
     { id: 'simulation', label: 'Simulation', icon: Play, roles: ['admin', 'staff', 'user'] },
     { id: 'settings', label: 'Settings', icon: Settings, roles: ['admin', 'staff', 'user'] },
@@ -473,7 +473,7 @@ const DashboardContent = ({ onNavigate }) => {
   return (
     <div className="pt-24">
       <Header
-        title="Dashboard"
+        title="Home"
         description="Welcome back! Here's what's happening with your forecasting system today."
         icon={Home}
       />

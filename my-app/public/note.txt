@@ -12,6 +12,9 @@ npm install react-router-dom recharts lucide-react
    npx tailwindcss init -p
    npm install framer-motion
 
+   
+   npm install express ws googleapis cors
+
 
 #BACKEND
 cd backend

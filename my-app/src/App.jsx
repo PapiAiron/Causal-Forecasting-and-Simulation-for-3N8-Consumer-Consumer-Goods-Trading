@@ -18,6 +18,7 @@ import ManageAccounts from "./pages/ManageAccounts";
 import AdminUserVerification from "./pages/AdminUserVerification";
 import SettingsPage from "./pages/SettingsPage";
 import AppearanceSettings from "./pages/AppearanceSettings";
+import Chatbot from "./components/Chatbot";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState(() => {
@@ -238,6 +239,7 @@ const App = () => {
         {currentPage === "user-verification" && <AdminUserVerification onNavigate={handleNavigation} onBack={onBack} />}
       </div>
       </PageTransition>
+       {user && currentPage !== "login" && currentPage !== "signup" && currentPage !== "getstarted" && <Chatbot />}
     </ThemeProvider>
   );
 };

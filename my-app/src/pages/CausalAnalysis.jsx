@@ -57,8 +57,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     { value: 'weather_rainy', label: 'Rainy Season', icon: CloudRain, color: '#3B82F6', impact: -20 },
     { value: 'holiday', label: 'Holiday/Festival', icon: Gift, color: '#10B981', impact: 40 },
     { value: 'event', label: 'Major Event', icon: Users, color: '#8B5CF6', impact: 35 },
-    { value: 'promotion', label: 'Promotion', icon: Zap, color: '#EC4899', impact: 30 },
-    { value: 'disruption', label: 'Supply Disruption', icon: AlertTriangle, color: '#EF4444', impact: -40 }
+    { value: 'other', label: 'Other Causal Factors', icon: AlertTriangle, color: '#F59E0B', impact: 0 }
   ];
 
   const runForecastWithEvents = async (uploadedFile, events) => {
@@ -312,7 +311,13 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Causal Events</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Plan and manage events that impact beverage sales</p>
                 </div>
-                <button onClick={() => setShowEventModal(true)} className="flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all hover:scale-105" style={{ backgroundColor: theme.chart }}>
+                <button 
+                  onClick={() => setShowEventModal(true)} 
+                  disabled={!file}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${!file ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} 
+                  style={{ backgroundColor: theme.chart }}
+                  title={!file ? 'Upload data first to add events' : 'Add a new causal event'}
+                >
                   <Plus size={18} /><span>Add Event</span>
                 </button>
               </div>

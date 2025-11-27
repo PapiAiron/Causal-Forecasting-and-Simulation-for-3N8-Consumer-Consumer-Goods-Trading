@@ -91,7 +91,7 @@ const SettingsPage = ({ onNavigate, onBack }) => {
                     Complete Account Management
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    For full access to profile settings, security options, and notification preferences, visit the Account Settings page.
+                    For full access to profile settingsa and security options, visit the Account Settings page.
                   </p>
                   <button
                     onClick={() => onNavigate('accountsettings')}

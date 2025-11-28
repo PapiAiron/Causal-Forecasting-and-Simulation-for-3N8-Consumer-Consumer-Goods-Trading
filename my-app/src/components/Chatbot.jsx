@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Bot, User, Sparkles } from 'lucide-react';
-
+import { useTheme } from "../components/ThemeContext";
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -14,7 +14,7 @@ const Chatbot = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
-
+  const { theme } = useTheme();
   // Gemini API Configuration
   const GEMINI_API_KEY = "AIzaSyDls9Ny2ciONGXc-QC5QI1o77eXtaWGydE";
   const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -237,7 +237,8 @@ Respond to the user's question now:`;
         onClick={() => setIsOpen(!isOpen)}
         className={`chatbot-button fixed z-50 p-3 sm:p-4 rounded-full shadow-lg transition-all duration-300 hover:scale-110 active:scale-95
           bottom-4 right-4 sm:bottom-6 sm:right-6
-          ${isOpen ? "bg-red-500" : "bg-gradient-to-r from-blue-600 to-cyan-600"}`}
+          ${isOpen ? "bg-red-500" : `bg-gradient-to-r ${theme.gradient}`  }`}
+
       >
         {isOpen ? (
           <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -273,7 +274,7 @@ Respond to the user's question now:`;
             lg:w-[360px] lg:h-[520px] lg:max-h-[75vh]`}
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-3 sm:p-4 flex items-center flex-shrink-0">
+            <div className="bg-gradient-to-r ${theme.gradient} p-3 sm:p-4 flex items-center flex-shrink-0">
               <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white mr-2 sm:mr-3" />
               <div className="flex-1 min-w-0">
                 <h3 className="text-white font-semibold text-sm sm:text-base truncate">3N8 Assistant</h3>
@@ -309,10 +310,11 @@ Respond to the user's question now:`;
                     <div
                       className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         msg.type === "user"
-                          ? "bg-blue-500"
+                          ? `${theme.primary}`
                           : msg.isError
                           ? "bg-red-500"
-                          : "bg-gradient-to-r from-blue-600 to-cyan-600"
+                          : `bg-gradient-to-r ${theme.gradient}`
+
                       }`}
                     >
                       {msg.type === "user" ? (
@@ -327,7 +329,7 @@ Respond to the user's question now:`;
                       <div
                         className={`rounded-2xl px-3 py-2 sm:px-4 sm:py-3 ${
                           msg.type === "user"
-                            ? "bg-blue-500 text-white"
+                            ? `${theme.primary}`
                             : msg.isError
                             ? "bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/20 dark:text-red-400"
                             : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm text-gray-800 dark:text-gray-200"
@@ -349,14 +351,20 @@ Respond to the user's question now:`;
               {/* Loading Indicator */}
               {isLoading && (
                 <div className="flex items-center space-x-2">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r from-blue-600 to-cyan-600 flex items-center justify-center">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r ${theme.gradient} flex items-center justify-center">
                     <Bot className="text-white w-3 h-3 sm:w-4 sm:h-4" />
                   </div>
                   <div className="bg-white dark:bg-gray-800 px-3 py-2 sm:px-4 sm:py-3 rounded-2xl shadow border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.15s'}}></div>
-                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.3s'}}></div>
+                        <div className={`w-2 h-2 ${theme.accent.replace("text-", "bg-")} rounded-full animate-bounce`}></div>
+                        <div 
+                          className={`w-2 h-2 ${theme.accent.replace("text-", "bg-")} rounded-full animate-bounce`} 
+                          style={{ animationDelay: "0.15s" }}
+                        ></div>
+                        <div 
+                          className={`w-2 h-2 ${theme.accent.replace("text-", "bg-")} rounded-full animate-bounce`} 
+                          style={{ animationDelay: "0.3s" }}
+                        ></div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">Thinking...</span>
                     </div>
                   </div>
@@ -381,7 +389,7 @@ Respond to the user's question now:`;
                 <button
                   onClick={handleSendMessage}
                   disabled={!inputMessage.trim() || isLoading}
-                  className="px-3 py-2 sm:px-4 sm:py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity flex-shrink-0"
+                  className="px-3 py-2 sm:px-4 sm:py-2 bg-gradient-to-r ${theme.gradient} text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity flex-shrink-0"
                 >
                   <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>

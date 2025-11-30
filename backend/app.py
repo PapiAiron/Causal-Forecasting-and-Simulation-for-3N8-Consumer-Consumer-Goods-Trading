@@ -189,33 +189,22 @@ def process_standard_format(df):
 
 def calculate_metrics(y_true, y_pred):
     """
-    Calculate comprehensive evaluation metrics
+    Calculate ONLY MAPE (Mean Absolute Percentage Error)
     """
     mask = ~(np.isnan(y_true) | np.isnan(y_pred))
     y_true_clean = np.array(y_true)[mask]
     y_pred_clean = np.array(y_pred)[mask]
-    
+
     if len(y_true_clean) == 0:
-        return {'mae': 0, 'rmse': 0, 'mape': 0, 'r2': 0, 'accuracy': 0, 'bias': 0}
-    
-    mae = mean_absolute_error(y_true_clean, y_pred_clean)
-    rmse = np.sqrt(mean_squared_error(y_true_clean, y_pred_clean))
-    
+        return {'mape': 0}
+
     mape_values = np.abs((y_true_clean - y_pred_clean) / y_true_clean)
     mape = np.mean(mape_values[np.isfinite(mape_values)]) * 100
-    
-    r2 = r2_score(y_true_clean, y_pred_clean)
-    accuracy = max(0, 100 - mape)
-    bias = np.mean(y_pred_clean - y_true_clean) / np.mean(y_true_clean) * 100
-    
+
     return {
-        'mae': round(float(mae), 2),
-        'rmse': round(float(rmse), 2),
-        'mape': round(float(mape), 2),
-        'r2': round(float(r2), 4),
-        'accuracy': round(float(accuracy), 2),
-        'bias': round(float(bias), 2)
+        'mape': round(float(mape), 2)
     }
+
 
 
 def get_optimized_prophet_params(df, target_col='y'):
@@ -276,52 +265,30 @@ def get_optimized_prophet_params(df, target_col='y'):
 
 def evaluate_model_performance(prophet_df, model, forecast_result):
     """
-    Comprehensive model evaluation with multiple metrics
+    Model evaluation using ONLY MAPE
     """
     print(f"\n{'='*60}")
-    print("MODEL PERFORMANCE EVALUATION")
+    print("MODEL PERFORMANCE (MAPE ONLY)")
     print(f"{'='*60}")
-    
+
     hist_forecast = forecast_result[forecast_result['ds'] <= prophet_df['ds'].max()].copy()
     hist_forecast = hist_forecast.merge(prophet_df, on='ds', how='left')
     valid_data = hist_forecast.dropna(subset=['y', 'yhat'])
-    
+
     evaluation_results = {}
-    
+
     if len(valid_data) > 10:
         in_sample_metrics = calculate_metrics(
             valid_data['y'].values,
             valid_data['yhat'].values
         )
-        
-        print("\nIN-SAMPLE METRICS (Historical Fit):")
-        print(f"  MAE:      {in_sample_metrics['mae']:>10,.2f} units")
-        print(f"  RMSE:     {in_sample_metrics['rmse']:>10,.2f} units")
-        print(f"  MAPE:     {in_sample_metrics['mape']:>10.2f}%")
-        print(f"  Accuracy: {in_sample_metrics['accuracy']:>10.2f}%")
-        print(f"  R²:       {in_sample_metrics['r2']:>10.4f}")
-        print(f"  Bias:     {in_sample_metrics['bias']:>+10.2f}%")
-        
-        print("\nPERFORMANCE ASSESSMENT:")
-        if in_sample_metrics['accuracy'] >= 90:
-            print("  ✓ EXCELLENT - Model fits historical data very well")
-        elif in_sample_metrics['accuracy'] >= 80:
-            print("  ✓ GOOD - Model is reliable for forecasting")
-        elif in_sample_metrics['accuracy'] >= 70:
-            print("  ⚠ FAIR - Model may need tuning")
-        else:
-            print("  ✗ POOR - Consider data preprocessing or different parameters")
-        
-        if abs(in_sample_metrics['bias']) < 5:
-            print("  ✓ Unbiased forecasts")
-        elif in_sample_metrics['bias'] > 5:
-            print(f"  ⚠ Over-forecasting by {in_sample_metrics['bias']:.1f}%")
-        else:
-            print(f"  ⚠ Under-forecasting by {abs(in_sample_metrics['bias']):.1f}%")
-        
+
+        print("\nIN-SAMPLE MAPE:")
+        print(f"  MAPE: {in_sample_metrics['mape']:.2f}%")
+
         evaluation_results['in_sample'] = in_sample_metrics
-        
-        # Cross-validation
+
+        # Cross-validation (MAPE only)
         if len(prophet_df) >= 90:
             try:
                 print("\nPerforming cross-validation...")
@@ -332,40 +299,21 @@ def evaluate_model_performance(prophet_df, model, forecast_result):
                     horizon='30 days',
                     parallel=None
                 )
-                
+
                 cv_metrics = calculate_metrics(df_cv['y'].values, df_cv['yhat'].values)
-                
-                print("\nCROSS-VALIDATION METRICS (Out-of-sample):")
-                print(f"  MAE:      {cv_metrics['mae']:>10,.2f} units")
-                print(f"  RMSE:     {cv_metrics['rmse']:>10,.2f} units")
-                print(f"  MAPE:     {cv_metrics['mape']:>10.2f}%")
-                print(f"  Accuracy: {cv_metrics['accuracy']:>10.2f}%")
-                print(f"  R²:       {cv_metrics['r2']:>10.4f}")
-                
-                accuracy_drop = in_sample_metrics['accuracy'] - cv_metrics['accuracy']
-                print(f"\nOVERFITTING CHECK:")
-                print(f"  Accuracy drop: {accuracy_drop:+.2f}%")
-                if accuracy_drop < 5:
-                    print("  ✓ No overfitting detected")
-                elif accuracy_drop < 10:
-                    print("  ⚠ Slight overfitting")
-                else:
-                    print("  ✗ Significant overfitting - model may not generalize well")
-                
-                print(f"{'='*60}\n")
-                
+
+                print("\nCROSS-VALIDATION MAPE:")
+                print(f"  MAPE: {cv_metrics['mape']:.2f}%")
+
                 evaluation_results['cross_validation'] = cv_metrics
-                evaluation_results['overfitting_check'] = {
-                    'accuracy_drop': round(float(accuracy_drop), 2),
-                    'status': 'good' if accuracy_drop < 5 else 'warning' if accuracy_drop < 10 else 'poor'
-                }
+
             except Exception as e:
                 print(f"  Cross-validation skipped: {e}")
         else:
-            print(f"\n  Note: Not enough data for cross-validation (need 90+ days, have {len(prophet_df)})")
-            print(f"{'='*60}\n")
-    
-    return evaluation_results if evaluation_results else {'in_sample': {'mae': 0, 'rmse': 0, 'mape': 0, 'r2': 0, 'accuracy': 0}}
+            print("\nNot enough data for cross-validation (need 90+ days).")
+
+    return evaluation_results if evaluation_results else {'in_sample': {'mape': 0}}
+
 
 
 def format_mdy(ts):
@@ -501,14 +449,25 @@ def forecast():
 
         # Final metrics
         final_metrics = evaluation_results.get('in_sample', {})
+
         
         print(f"\n{'='*60}")
         print("FORECAST GENERATION COMPLETE")
         print(f"{'='*60}")
+
+        mape_value = final_metrics.get('mape', None)
+
+        if mape_value is not None:
+            accuracy = 100 - mape_value
+            print(f"✓ Model MAPE: {mape_value:.2f}%")
+            print(f"✓ Model Accuracy (100 - MAPE): {accuracy:.2f}%")
+        else:
+            print("✓ Model Accuracy: N/A")
+
         print(f"✓ Generated {forecast_days}-day forecast")
-        print(f"✓ Model accuracy: {final_metrics.get('accuracy', 0):.2f}%")
         print(f"✓ Total forecast demand: {sum(forecast_values):,.0f} units")
         print(f"{'='*60}\n")
+
 
         return jsonify({
             "model_used": "prophet_optimized",
@@ -535,88 +494,60 @@ def forecast():
         print(f"{'='*60}\n")
         return jsonify({"error": str(e)}), 400
 
-
 def generate_forecast_insights(evaluation_results, historical_df, future_forecast, forecast_days):
     """
-    Generate actionable insights from forecast evaluation
+    Insights based ONLY on MAPE
     """
     insights = []
     
     metrics = evaluation_results.get('in_sample', {})
-    accuracy = metrics.get('accuracy', 0)
-    bias = metrics.get('bias', 0)
-    
-    # Performance insight
-    if accuracy >= 90:
+    mape = metrics.get('mape', 0)
+
+    # MAPE-Based Performance Assessment
+    if mape <= 10:
         insights.append({
             "type": "success",
-            "title": "Excellent Model Performance",
-            "message": f"Model achieved {accuracy:.1f}% accuracy on historical data. Forecasts are highly reliable."
+            "title": "Excellent Model Accuracy",
+            "message": f"MAPE is {mape:.1f}%, indicating highly reliable forecasts."
         })
-    elif accuracy >= 80:
+    elif mape <= 20:
         insights.append({
             "type": "info",
-            "title": "Good Model Performance",
-            "message": f"Model achieved {accuracy:.1f}% accuracy. Forecasts are reliable for planning purposes."
+            "title": "Good Forecast Quality",
+            "message": f"MAPE is {mape:.1f}%. Forecasts are dependable for planning."
         })
-    elif accuracy >= 70:
+    elif mape <= 30:
         insights.append({
             "type": "warning",
-            "title": "Fair Model Performance",
-            "message": f"Model achieved {accuracy:.1f}% accuracy. Consider reviewing data quality or adding more historical data."
+            "title": "Moderate Accuracy",
+            "message": f"MAPE is {mape:.1f}%. Consider reviewing outliers or data quality."
         })
     else:
         insights.append({
             "type": "error",
             "title": "Low Model Accuracy",
-            "message": f"Model accuracy is {accuracy:.1f}%. Review data quality, outliers, or consider alternative forecasting methods."
+            "message": f"MAPE is {mape:.1f}%. Forecasts may be unreliable."
         })
-    
-    # Bias insight
-    if abs(bias) > 10:
-        if bias > 0:
-            insights.append({
-                "type": "warning",
-                "title": "Over-forecasting Detected",
-                "message": f"Model tends to over-predict by {bias:.1f}%. Consider adjusting safety stock calculations accordingly."
-            })
-        else:
-            insights.append({
-                "type": "warning",
-                "title": "Under-forecasting Detected",
-                "message": f"Model tends to under-predict by {abs(bias):.1f}%. Increase buffer inventory to avoid stockouts."
-            })
-    
+
     # Trend insight
     hist_mean = historical_df['y'].mean()
     forecast_mean = future_forecast['yhat'].mean()
     trend_change = ((forecast_mean - hist_mean) / hist_mean) * 100
-    
+
     if abs(trend_change) > 20:
         if trend_change > 0:
             insights.append({
                 "type": "info",
                 "title": "Increasing Demand Trend",
-                "message": f"Forecast indicates {trend_change:.1f}% increase in demand. Consider increasing inventory levels and supplier capacity."
+                "message": f"Forecast suggests a {trend_change:.1f}% increase in future demand."
             })
         else:
             insights.append({
                 "type": "info",
-                "title": "Decreasing Demand Trend",
-                "message": f"Forecast indicates {abs(trend_change):.1f}% decrease in demand. Optimize inventory to reduce carrying costs."
+                "title": "Declining Demand Trend",
+                "message": f"Forecast suggests a {abs(trend_change):.1f}% decline in future demand."
             })
-    
-    # Overfitting check
-    if 'cross_validation' in evaluation_results:
-        cv_metrics = evaluation_results['cross_validation']
-        cv_accuracy = cv_metrics.get('accuracy', 0)
-        if accuracy - cv_accuracy > 10:
-            insights.append({
-                "type": "warning",
-                "title": "Potential Overfitting",
-                "message": f"Model performs significantly better on training data ({accuracy:.1f}%) than validation data ({cv_accuracy:.1f}%). Use forecasts cautiously."
-            })
-    
+
     return insights
 
 

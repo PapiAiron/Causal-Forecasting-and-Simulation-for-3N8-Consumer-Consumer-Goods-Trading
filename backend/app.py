@@ -1075,6 +1075,8 @@ def full_report():
         prompt = f"""Analyze this beverage sales data and provide strategic insights:
 
 Sales Summary:
+-dont include ** to the output
+-Provide a summary output dont make it too long
 - Total Sales: {summary['total_sales']:,} units
 - Average Daily Sales: {summary['average_daily_sales']:,} units
 - Peak Sales Day: {summary['peak_sales']:,} units

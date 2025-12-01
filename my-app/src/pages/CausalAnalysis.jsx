@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, Upload, Plus, X, Sun, Cloud, CloudRain, Zap, Users, Gift, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Upload, Plus, X, Sun, Cloud, CloudRain, Zap, Users, Gift, AlertTriangle, ChevronDown  } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -16,6 +16,24 @@ import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
 import { LayoutWrapper } from './DashboardHome';
 
+  const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    
+    return (
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        >
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <ChevronDown 
+            className={`w-5 h-5 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {isOpen && <div className="p-4 pt-0">{children}</div>}
+      </div>
+    );
+  };
 const CausalAnalysis = ({ onNavigate, onBack }) => {
   const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
@@ -26,7 +44,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [scenarioGraph, setScenarioGraph] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [featureImportance, setFeatureImportance] = useState([]);
-  const [timeView, setTimeView] = useState('daily');
+  const [timeView, setTimeView] = useState('monthly');
   const [causalEvents, setCausalEvents] = useState([]);
   const [showEventModal, setShowEventModal] = useState(false);
   const [storeAnalytics, setStoreAnalytics] = useState(null);
@@ -37,7 +55,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [loadingDecisions, setLoadingDecisions] = useState(false);
   const [categoryAnalysis, setCategoryAnalysis] = useState(null);
   const [storeDemandCauses, setStoreDemandCauses] = useState(null);
-
+  const [activeInsightTab, setActiveInsightTab] = useState('overview');
   const fetchDecisionSupport = async (uploadedFile) => {
     setLoadingDecisions(true);
     try {
@@ -434,7 +452,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const avgPredicted = forecastData.length ? Math.round(forecastData.reduce((s, f) => s + (f.predicted || 0), 0) / forecastData.length) : 0;
   const eventColors = {};
   causalEvents.forEach(event => { eventColors[`${event.typeLabel}_${event.id}`] = event.color; });
-  const getChartHeight = () => ({ daily: 450, weekly: 400, monthly: 380, quarterly: 350 }[timeView] || 320);
+  const getChartHeight = () => ({ daily: 350, weekly: 320, monthly: 300, quarterly: 280 }[timeView] || 280);
 
   return (
     <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
@@ -554,13 +572,15 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </>
             )}
 
-            <Card className="p-6">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">1. Combined Sales Overview</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Historical data and forecast with events</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Chart 1: Combined Overview - Takes full width when alone, half when with others */}
+              <Card className="p-6 lg:col-span-2">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Sales Overview</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 ">Historical data and forecast with events</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                   {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
                     <button key={view} onClick={() => setTimeView(view)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${timeView === view ? 'text-white shadow-lg' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`} style={timeView === view ? { backgroundColor: theme.chart } : {}}>
                       {view.charAt(0).toUpperCase() + view.slice(1)}
@@ -611,10 +631,10 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               )}
               
               {forecastPayload && displayData.length > 0 && (
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-                    <div className="text-sm font-medium text-green-800 dark:text-green-400">Avg {timeView === 'daily' ? 'Daily' : timeView === 'weekly' ? 'Weekly' : timeView === 'monthly' ? 'Monthly' : timeView === 'quarterly' ? 'Quarterly' : 'Yearly'} Sales</div>
-                    <div className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{avgPredicted.toLocaleString()}</div>
+                <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                    <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
+                    <div className="text-xl font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
                     {causalEvents.length > 0 && <div className="text-xs text-green-700 dark:text-green-400 mt-2">With {causalEvents.length} event{causalEvents.length > 1 ? 's' : ''} impact</div>}
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
@@ -645,13 +665,13 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
             {displayData.length > 0 && forecastData.length > 0 && (
               <Card className="p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">2. Forecast with Event Impact Breakdown</h2>
+       
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">2. Forecast with Event Impact Breakdown</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Detailed view of how each event affects the forecast</p>
-                </div>
+
                 {causalEvents.length === 0 ? (
                   <>
-                    <div style={{ height: 420 }}>
+                    <div style={{ height: 320 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -681,7 +701,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   </>
                 ) : (
                   <>
-                    <div style={{ height: 420 }}>
+                    <div style={{ height: 320 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -737,10 +757,10 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
             {displayData.length > 0 && displayData.some(d => d.actual !== null) && (
               <Card className="p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">3. Historical Sales Analysis</h2>
+ 
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">3. Historical Sales Analysis</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Actual sales performance and trends over time</p>
-                </div>
+
                 <div style={{ height: 420 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
@@ -811,37 +831,24 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   })()}
                 </div>
               </Card>
-            )}
-
-            {featureImportance.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Feature Importance</h3>
               
-
-                <div className="space-y-3">
-                  {featureImportance.slice(0, 8).map((f, i) => (
-                    <div key={i} className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">{f.feature}</span>
-                        <span className="font-semibold" style={{ color: theme.chart }}>{(f.importance * 100).toFixed(1)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${f.importance * 100}%`, backgroundColor: theme.chart }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
             )}
+            </div>
+
 
             {storeAnalytics && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📊 Store-Level Analytics</h3>
-                <div className="space-y-6">
-                  <div>
-                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Top Store Buyers</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {storeAnalytics.top_buyers?.map((store, idx) => (
+              <Card className="p-0 overflow-hidden">
+                <CollapsibleSection title="📊 Store-Level Analytics" defaultOpen={false}>
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Top Store Buyers</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {storeAnalytics.top_buyers?.length > 6 && (
+                            <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                              Show {storeAnalytics.top_buyers.length - 6} more stores...
+                            </button>
+                          )}
+                        {storeAnalytics.top_buyers?.slice(0, 6).map((store, idx) => (
                         <div key={idx} className="p-4 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
                           <div className="text-sm font-medium text-blue-800 dark:text-blue-400">#{idx + 1} {store.name}</div>
                           <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{store.sales.toLocaleString()}</div>
@@ -869,6 +876,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     </div>
                   )}
                 </div>
+                </CollapsibleSection>
               </Card>
             )}
 
@@ -940,31 +948,11 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </Card>
             )}
 
-            {featureImportance.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Feature Importance</h3>
-                <div className="space-y-3">
-                  {featureImportance.slice(0, 8).map((f, i) => (
-                    <div key={i} className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">{f.feature}</span>
-                        <span className="font-semibold" style={{ color: theme.chart }}>{(f.importance * 100).toFixed(1)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${f.importance * 100}%`, backgroundColor: theme.chart }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
 
           </div>
           {/* Decision Support System - AI-Powered Insights */}
             {decisionSupport && (
-              <Card className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-2 border-purple-200 dark:border-purple-800">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
+              <Card className="p-6">
                     <h2 className="text-xl font-bold text-purple-900 dark:text-purple-300 flex items-center gap-2">
                       <Zap className="w-6 h-6" />
                       AI-Powered Decision Support System
@@ -972,7 +960,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     <p className="text-sm text-purple-700 dark:text-purple-400 mt-1">
                       Strategic insights and recommendations powered by {decisionSupport.generated_by}
                     </p>
-                  </div>
+              
                   <button
                     onClick={() => fetchDecisionSupport(file)}
                     disabled={loadingDecisions || !file}
@@ -990,7 +978,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       </>
                     )}
                   </button>
-                </div>
+                
 
                 {/* Key Metrics Dashboard */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">

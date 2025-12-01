@@ -29,6 +29,77 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [timeView, setTimeView] = useState('daily');
   const [causalEvents, setCausalEvents] = useState([]);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [storeAnalytics, setStoreAnalytics] = useState(null);
+  const [reports, setReports] = useState(null);
+  const [causalFactorAnalysis, setCausalFactorAnalysis] = useState(null); // external factors, promo impact
+  const [fullReports, setFullReports] = useState(null); // monthly/weekly/yearly reports, bottle size, categories
+  const [decisionSupport, setDecisionSupport] = useState(null);
+  const [loadingDecisions, setLoadingDecisions] = useState(false);
+  const [categoryAnalysis, setCategoryAnalysis] = useState(null);
+  const [storeDemandCauses, setStoreDemandCauses] = useState(null);
+
+  const fetchDecisionSupport = async (uploadedFile) => {
+    setLoadingDecisions(true);
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/decision-support', {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (!res.ok) throw new Error(await res.text() || 'Decision support failed');
+      const data = await res.json();
+      setDecisionSupport(data);
+    } catch (err) {
+      console.error('Decision support error:', err);
+      setError(String(err.message || err));
+    } finally {
+      setLoadingDecisions(false);
+    }
+  };
+
+  const fetchCategoryAnalysis = async (uploadedFile) => {
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/category-analysis', {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setCategoryAnalysis(data);
+      }
+    } catch (err) {
+      console.error('Category analysis error:', err);
+    }
+  };
+
+  const fetchStoreDemandCauses = async (uploadedFile) => {
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/store-demand-causes', {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setStoreDemandCauses(data);
+      }
+    } catch (err) {
+      console.error('Store demand causes error:', err);
+    }
+  };
+
+
+  
   const [newEvent, setNewEvent] = useState({
     type: 'weather_hot',
     startDate: '',
@@ -59,6 +130,60 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     { value: 'event', label: 'Major Event', icon: Users, color: '#8B5CF6', impact: 35 },
     { value: 'other', label: 'Other Causal Factors', icon: AlertTriangle, color: '#F59E0B', impact: 0 }
   ];
+
+
+
+  const fetchStoreAnalytics = async (uploadedFile) => {
+    setIsLoading(true);
+    setUploadStatus('Fetching store-level analytics...');
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/store-analytics', {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error(await res.text() || 'Store analytics failed');
+      const data = await res.json();
+      return data; // data should include top buyers, demand patterns, etc.
+    } catch (err) {
+      console.error(err);
+      setError(String(err.message || err));
+      return null;
+    } finally {
+      setIsLoading(false);
+      setUploadStatus('');
+    }
+  };
+
+  const fetchReports = async (uploadedFile, period = 'monthly') => {
+    setIsLoading(true);
+    setUploadStatus(`Generating ${period} reports...`);
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      form.append('period', period);
+
+      const res = await fetch('http://127.0.0.1:5000/reporting', {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error(await res.text() || 'Reporting failed');
+      const data = await res.json();
+      return data; // data should include category/bottle size breakdown, trends, etc.
+    } catch (err) {
+      console.error(err);
+      setError(String(err.message || err));
+      return null;
+    } finally {
+      setIsLoading(false);
+      setUploadStatus('');
+    }
+  };
+
+  
+
 
   const runForecastWithEvents = async (uploadedFile, events) => {
     setIsLoading(true);
@@ -149,11 +274,43 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
   };
 
+    // Modify the handleFileUploadAndAnalyze function to include these new fetches
   const handleFileUploadAndAnalyze = async (e) => {
     const f = e?.target?.files?.[0];
     if (!f) return;
     setFile(f);
+
+    // Run causal forecast
     await runForecastWithEvents(f, causalEvents);
+
+    const forecastForm = new FormData();
+    forecastForm.append('file', f);
+
+    // Fetch all reports in parallel
+    try {
+      await Promise.all([
+        // Existing fetches
+        fetch('http://127.0.0.1:5000/store-analytics', { method: 'POST', body: forecastForm })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => data && setStoreAnalytics(data)),
+        
+        fetch('http://127.0.0.1:5000/causal-factors-report', { method: 'POST', body: forecastForm })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => data && setCausalFactorAnalysis(data)),
+        
+        fetch('http://127.0.0.1:5000/full-reports', { method: 'POST', body: forecastForm })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => data && setFullReports(data)),
+        
+        // New fetches
+        fetchDecisionSupport(f),
+        fetchCategoryAnalysis(f),
+        fetchStoreDemandCauses(f)
+      ]);
+    } catch (err) {
+      console.error("Error fetching reports:", err);
+      setError(String(err));
+    }
   };
 
   const handleAddEvent = async () => {
@@ -659,6 +816,133 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             {featureImportance.length > 0 && (
               <Card className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Feature Importance</h3>
+              
+
+                <div className="space-y-3">
+                  {featureImportance.slice(0, 8).map((f, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">{f.feature}</span>
+                        <span className="font-semibold" style={{ color: theme.chart }}>{(f.importance * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${f.importance * 100}%`, backgroundColor: theme.chart }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {storeAnalytics && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📊 Store-Level Analytics</h3>
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Top Store Buyers</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {storeAnalytics.top_buyers?.map((store, idx) => (
+                        <div key={idx} className="p-4 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+                          <div className="text-sm font-medium text-blue-800 dark:text-blue-400">#{idx + 1} {store.name}</div>
+                          <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{store.sales.toLocaleString()}</div>
+                          <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">Total purchases</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {storeAnalytics.store_demand_patterns && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Peak Demand Days by Store</h4>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {Object.entries(storeAnalytics.store_demand_patterns).slice(0, 5).map(([store, days], idx) => (
+                          <div key={idx} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                            <div className="font-semibold text-gray-900 dark:text-white mb-2">{store}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                              {days.slice(0, 3).map((day, dayIdx) => (
+                                <div key={dayIdx}>• {day.DATE}: {day.total.toLocaleString()} units</div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {causalFactorAnalysis && causalFactorAnalysis.factors && causalFactorAnalysis.factors.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">🔍 Causal Factor Analysis</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {causalFactorAnalysis.factors.map((f, idx) => (
+                    <div key={idx} className={`p-4 rounded-xl border-2 ${f.impact >= 0 ? 'border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20' : 'border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20'}`}>
+                      <div className={`text-sm font-medium ${f.impact >= 0 ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>{f.factor}</div>
+                      <div className={`text-2xl font-bold mt-1 ${f.impact >= 0 ? 'text-green-900 dark:text-green-300' : 'text-red-900 dark:text-red-300'}`}>
+                        {f.impact > 0 ? '+' : ''}{f.impact.toFixed(1)}%
+                      </div>
+                      <div className={`text-xs mt-1 ${f.impact >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                        {f.impact >= 0 ? 'Increases sales' : 'Decreases sales'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {fullReports && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📈 Full Reporting System</h3>
+                <div className="space-y-6">
+                  {fullReports.monthly && fullReports.monthly.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Monthly Sales</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {fullReports.monthly.slice(-6).map((m, idx) => (
+                          <div key={idx} className="p-3 rounded-lg border bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
+                            <div className="text-xs font-medium text-purple-800 dark:text-purple-400">{m.month}</div>
+                            <div className="text-lg font-bold text-purple-900 dark:text-purple-300 mt-1">{m.total_sales.toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {fullReports.weekly && fullReports.weekly.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Recent Weekly Sales</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {fullReports.weekly.slice(-5).map((w, idx) => (
+                          <div key={idx} className="p-3 rounded-lg border bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-800">
+                            <div className="text-xs font-medium text-blue-800 dark:text-blue-400">{w.week}</div>
+                            <div className="text-lg font-bold text-blue-900 dark:text-blue-300 mt-1">{w.total_sales.toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {fullReports.yearly && fullReports.yearly.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Yearly Sales</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {fullReports.yearly.map((y, idx) => (
+                          <div key={idx} className="p-4 rounded-xl border-2 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800">
+                            <div className="text-sm font-medium text-amber-800 dark:text-amber-400">{y.year}</div>
+                            <div className="text-2xl font-bold text-amber-900 dark:text-amber-300 mt-1">{y.total_sales.toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {featureImportance.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Feature Importance</h3>
                 <div className="space-y-3">
                   {featureImportance.slice(0, 8).map((f, i) => (
                     <div key={i} className="space-y-2">
@@ -676,6 +960,258 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             )}
 
           </div>
+          {/* Decision Support System - AI-Powered Insights */}
+            {decisionSupport && (
+              <Card className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-2 border-purple-200 dark:border-purple-800">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold text-purple-900 dark:text-purple-300 flex items-center gap-2">
+                      <Zap className="w-6 h-6" />
+                      AI-Powered Decision Support System
+                    </h2>
+                    <p className="text-sm text-purple-700 dark:text-purple-400 mt-1">
+                      Strategic insights and recommendations powered by {decisionSupport.generated_by}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => fetchDecisionSupport(file)}
+                    disabled={loadingDecisions || !file}
+                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-medium transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {loadingDecisions ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={16} />
+                        Refresh Insights
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Key Metrics Dashboard */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Total Sales</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {decisionSupport.metrics?.total_sales?.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Avg Daily</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {decisionSupport.metrics?.avg_daily?.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Trend</div>
+                    <div className={`text-2xl font-bold mt-1 ${decisionSupport.metrics?.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {decisionSupport.metrics?.trend > 0 ? '+' : ''}{decisionSupport.metrics?.trend?.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Peak Month</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {decisionSupport.metrics?.peak_month || 'N/A'}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Volatility</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {((decisionSupport.metrics?.volatility || 0) * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* Store Performance Metrics */}
+                {decisionSupport.metrics?.store_metrics && (
+                  <div className="mb-6 p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <h4 className="text-md font-semibold text-purple-900 dark:text-purple-300 mb-3">Top Store Performance</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Top Performer</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">
+                          {decisionSupport.metrics.store_metrics.top_store}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Total Sales</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">
+                          {decisionSupport.metrics.store_metrics.top_store_sales?.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Total Stores</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">
+                          {decisionSupport.metrics.store_metrics.total_stores}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Insights */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-purple-200 dark:border-purple-700">
+                  <div className="prose prose-purple dark:prose-invert max-w-none">
+                    <div className="text-sm leading-relaxed space-y-4">
+                      {decisionSupport.insights.split('\n').map((line, idx) => {
+                        // Headers
+                        if (line.startsWith('# ')) {
+                          return <h2 key={idx} className="text-xl font-bold mt-6 mb-3 text-purple-900 dark:text-purple-300">{line.substring(2)}</h2>;
+                        }
+                        if (line.startsWith('## ')) {
+                          return <h3 key={idx} className="text-lg font-semibold mt-4 mb-2 text-purple-800 dark:text-purple-400">{line.substring(3)}</h3>;
+                        }
+                        if (line.startsWith('### ')) {
+                          return <h4 key={idx} className="text-md font-medium mt-3 mb-2 text-purple-700 dark:text-purple-500">{line.substring(4)}</h4>;
+                        }
+                        // Bullet points
+                        if (line.startsWith('- ') || line.startsWith('* ')) {
+                          return (
+                            <div key={idx} className="flex items-start gap-2 ml-4">
+                              <span className="text-purple-600 dark:text-purple-400 mt-1">•</span>
+                              <span className="flex-1 text-gray-700 dark:text-gray-300">{line.substring(2)}</span>
+                            </div>
+                          );
+                        }
+                        // Regular paragraphs
+                        if (line.trim()) {
+                          return <p key={idx} className="text-gray-700 dark:text-gray-300">{line}</p>;
+                        }
+                        return null;
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Category & Bottle Size Analysis */}
+            {categoryAnalysis && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  📦 Product Category & Bottle Size Analysis
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Categories */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Sales by Category</h4>
+                    <div className="space-y-3">
+                      {categoryAnalysis.categories?.map((cat, idx) => {
+                        const total = categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0);
+                        const percentage = ((cat.sales / total) * 100).toFixed(1);
+                        return (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{cat.category}</span>
+                              <span className="font-semibold" style={{ color: theme.chart }}>{cat.sales.toLocaleString()} ({percentage}%)</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${percentage}%`, backgroundColor: theme.chart }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Bottle Sizes */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Sales by Bottle Size</h4>
+                    <div className="space-y-3">
+                      {categoryAnalysis.bottle_sizes?.map((size, idx) => {
+                        const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
+                        const percentage = ((size.sales / total) * 100).toFixed(1);
+                        return (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{size.size}</span>
+                              <span className="font-semibold text-blue-600 dark:text-blue-400">{size.sales.toLocaleString()} ({percentage}%)</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="h-2 rounded-full transition-all duration-500 bg-blue-500" style={{ width: `${percentage}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                  Total SKUs analyzed: {categoryAnalysis.total_skus}
+                </div>
+              </Card>
+            )}
+
+            {/* Store Demand Causes */}
+            {storeDemandCauses && storeDemandCauses.causes && storeDemandCauses.causes.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  🏪 Store Demand Analysis & Root Causes
+                </h3>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {storeDemandCauses.causes.map((cause, idx) => {
+                    const statusColors = {
+                      stopped: 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20',
+                      critical: 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20',
+                      warning: 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20',
+                      variable: 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20',
+                      good: 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20',
+                      stable: 'border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
+                    };
+                    return (
+                      <div key={idx} className={`p-4 rounded-lg border-2 ${statusColors[cause.status] || statusColors.stable}`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-semibold text-gray-900 dark:text-white">{cause.store}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {cause.total_orders} orders
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                          {cause.cause}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Recent Avg:</span>
+                            <span className="font-semibold ml-1">{Math.round(cause.recent_avg).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Overall Avg:</span>
+                            <span className="font-semibold ml-1">{Math.round(cause.overall_avg).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Last Order:</span>
+                            <span className="font-semibold ml-1">{cause.days_since_last_order}d ago</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {featureImportance.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Feature Importance</h3>
+                <div className="space-y-3">
+                  {featureImportance.slice(0, 8).map((f, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">{f.feature}</span>
+                        <span className="font-semibold" style={{ color: theme.chart }}>{(f.importance * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${f.importance * 100}%`, backgroundColor: theme.chart }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
         </main>
       </div>
     </LayoutWrapper>

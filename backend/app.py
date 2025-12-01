@@ -594,7 +594,7 @@ def generate_forecast_insights(evaluation_results, historical_df, future_forecas
     
     if abs(trend_change) > 20:
         if trend_change > 0:
-            insights.append({
+            insights.append({   
                 "type": "info",
                 "title": "Increasing Demand Trend",
                 "message": f"Forecast indicates {trend_change:.1f}% increase in demand. Consider increasing inventory levels and supplier capacity."
@@ -619,7 +619,714 @@ def generate_forecast_insights(evaluation_results, historical_df, future_forecas
     
     return insights
 
+@app.route("/decision-support", methods=["POST"])
+def decision_support():
+    """
+    Enhanced decision support using Gemini AI for insights
+    """
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
 
+        file = request.files["file"]
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean data
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+        
+        prophet_df = detect_format_and_process(df)
+        
+        # Calculate comprehensive metrics
+        total_sales = prophet_df['y'].sum()
+        avg_daily = prophet_df['y'].mean()
+        std_dev = prophet_df['y'].std()
+        cv = std_dev / avg_daily if avg_daily > 0 else 0
+        
+        # Trend analysis
+        first_half = prophet_df.iloc[:len(prophet_df)//2]['y'].mean()
+        second_half = prophet_df.iloc[len(prophet_df)//2:]['y'].mean()
+        trend = ((second_half - first_half) / first_half * 100) if first_half > 0 else 0
+        
+        # Seasonal analysis
+        prophet_df['month'] = prophet_df['ds'].dt.month
+        monthly_avg = prophet_df.groupby('month')['y'].mean().to_dict()
+        peak_month = max(monthly_avg, key=monthly_avg.get)
+        low_month = min(monthly_avg, key=monthly_avg.get)
+        
+        # Store analysis (if available)
+        store_metrics = {}
+        if 'OUTLET' in df.columns or 'outlet' in df.columns:
+            outlet_col = 'OUTLET' if 'OUTLET' in df.columns else 'outlet'
+            for col in df.columns[2:]:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df['total'] = df.iloc[:, 2:].sum(axis=1)
+            store_totals = df.groupby(outlet_col)['total'].sum().sort_values(ascending=False)
+            store_metrics = {
+                "top_store": store_totals.index[0] if len(store_totals) > 0 else "N/A",
+                "top_store_sales": float(store_totals.iloc[0]) if len(store_totals) > 0 else 0,
+                "total_stores": len(store_totals),
+                "store_distribution": store_totals.head(5).to_dict()
+            }
+        
+        # Prepare prompt for Gemini
+        prompt = f"""As a beverage distribution business analyst, provide strategic insights and recommendations based on this data:
+
+SALES OVERVIEW:
+- Total Sales: {int(total_sales):,} units
+- Average Daily Sales: {int(avg_daily):,} units
+- Volatility (CV): {cv:.2%}
+- Trend: {trend:+.1f}% ({"growing" if trend > 0 else "declining"})
+- Date Range: {prophet_df['ds'].min().date()} to {prophet_df['ds'].max().date()}
+
+SEASONAL PATTERNS:
+- Peak Month: {calendar.month_abbr[peak_month]} ({int(monthly_avg[peak_month]):,} avg units)
+- Lowest Month: {calendar.month_abbr[low_month]} ({int(monthly_avg[low_month]):,} avg units)
+
+{"STORE PERFORMANCE:" if store_metrics else ""}
+{f"- Top Performing Store: {store_metrics.get('top_store', 'N/A')} ({int(store_metrics.get('top_store_sales', 0)):,} units)" if store_metrics else ""}
+{f"- Total Stores: {store_metrics.get('total_stores', 0)}" if store_metrics else ""}
+
+Provide a comprehensive decision support report with:
+
+1. **EXPANSION RECOMMENDATIONS**
+   - Which regions/stores to prioritize for growth
+   - New market opportunities
+   - Resource allocation strategy
+
+2. **STOCKING STRATEGY**
+   - Optimal inventory levels by season
+   - Safety stock recommendations
+   - When to increase/decrease stock
+
+3. **RISK ASSESSMENT**
+   - Potential stockout periods
+   - Demand volatility concerns
+   - Store-specific risks
+
+4. **ACTIONABLE INSIGHTS**
+   - Top 5 immediate actions
+   - Short-term priorities (next 30 days)
+   - Long-term strategic moves (6-12 months)
+
+5. **STORE PRIORITIZATION**
+   - Which stores need attention
+   - High-potential stores for investment
+   - Underperforming stores requiring support
+
+Format with clear headers, bullet points, and specific numbers/percentages."""
+
+        # Call Gemini API
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 3072,
+                "topP": 0.95,
+                "topK": 40
+            }
+        }
+
+        url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
+        resp = requests.post(url_with_key, headers=headers, json=payload, timeout=30)
+        
+        if resp.status_code != 200:
+            # Fallback to rule-based insights
+            insights = generate_fallback_insights(total_sales, avg_daily, trend, cv, monthly_avg, store_metrics)
+            return jsonify({
+                "insights": insights,
+                "metrics": {
+                    "total_sales": int(total_sales),
+                    "avg_daily": int(avg_daily),
+                    "trend": round(trend, 2),
+                    "volatility": round(cv, 3),
+                    "peak_month": calendar.month_abbr[peak_month],
+                    "store_metrics": store_metrics
+                },
+                "generated_by": "Rule-based System (Gemini unavailable)"
+            })
+        
+        result = resp.json()
+        generated_text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+        
+        return jsonify({
+            "insights": generated_text,
+            "metrics": {
+                "total_sales": int(total_sales),
+                "avg_daily": int(avg_daily),
+                "trend": round(trend, 2),
+                "volatility": round(cv, 3),
+                "peak_month": calendar.month_abbr[peak_month],
+                "store_metrics": store_metrics
+            },
+            "generated_by": "Gemini 2.5 Flash"
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Decision support error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+
+def generate_fallback_insights(total_sales, avg_daily, trend, cv, monthly_avg, store_metrics):
+    """Generate rule-based insights when Gemini is unavailable"""
+    peak_month = max(monthly_avg, key=monthly_avg.get)
+    low_month = min(monthly_avg, key=monthly_avg.get)
+    
+    insights = f"""# DECISION SUPPORT REPORT
+
+## 1. EXPANSION RECOMMENDATIONS
+"""
+    
+    if trend > 10:
+        insights += f"- ✅ **Strong growth trend (+{trend:.1f}%)** - Excellent time for expansion\n"
+        insights += "- Prioritize high-performing stores for increased capacity\n"
+        insights += "- Consider opening new distribution centers in underserved areas\n"
+    elif trend > 0:
+        insights += f"- ✅ Moderate growth (+{trend:.1f}%) - Selective expansion recommended\n"
+        insights += "- Focus on optimizing existing operations before major expansion\n"
+    else:
+        insights += f"- ⚠️ Declining trend ({trend:.1f}%) - Hold expansion, focus on retention\n"
+        insights += "- Investigate causes of decline before new investments\n"
+    
+    if store_metrics:
+        insights += f"\n- Top store ({store_metrics.get('top_store', 'N/A')}) accounts for significant volume\n"
+        insights += f"- {store_metrics.get('total_stores', 0)} total stores - diversification {'needed' if store_metrics.get('total_stores', 0) < 10 else 'adequate'}\n"
+    
+    insights += f"""
+
+## 2. STOCKING STRATEGY
+- **Peak Season ({calendar.month_abbr[peak_month]})**: Increase stock by 40-50%
+- **Low Season ({calendar.month_abbr[low_month]})**: Reduce stock by 20-30%
+- Average daily requirement: {int(avg_daily):,} units
+- Safety stock: {int(avg_daily * 7):,} units (7-day buffer)
+"""
+    
+    if cv > 0.5:
+        insights += "- ⚠️ High volatility detected - maintain higher safety stock\n"
+    elif cv > 0.3:
+        insights += "- Moderate volatility - standard safety stock adequate\n"
+    else:
+        insights += "- Low volatility - can optimize for lower carrying costs\n"
+    
+    insights += f"""
+
+## 3. RISK ASSESSMENT
+"""
+    if cv > 0.5:
+        insights += "- 🔴 HIGH RISK: Demand volatility above 50%\n"
+        insights += "- Implement dynamic reorder points\n"
+    
+    if trend < -5:
+        insights += "- 🔴 CRITICAL: Sales declining, investigate immediately\n"
+    
+    insights += f"- Monitor stock levels closely during {calendar.month_abbr[peak_month]}\n"
+    insights += f"- Potential overstock risk in {calendar.month_abbr[low_month]}\n"
+    
+    insights += """
+
+## 4. ACTIONABLE INSIGHTS
+
+### Immediate Actions (Next 30 Days):
+1. Review inventory levels for upcoming peak season
+2. Contact underperforming stores to understand challenges
+3. Optimize delivery routes for top-performing stores
+4. Implement demand forecasting automation
+5. Set up stockout alerts for critical SKUs
+
+### Short-term (3-6 Months):
+- Negotiate better rates with high-volume stores
+- Expand product range based on seasonal patterns
+- Implement promotional campaigns during low seasons
+
+### Long-term (6-12 Months):
+- Consider warehouse expansion if growth continues
+- Invest in predictive analytics
+- Develop strategic partnerships with top stores
+
+## 5. STORE PRIORITIZATION
+"""
+    
+    if store_metrics and store_metrics.get('store_distribution'):
+        insights += "**High Priority (Investment Focus):**\n"
+        for store, sales in list(store_metrics['store_distribution'].items())[:2]:
+            insights += f"- {store}: {int(sales):,} units (top performer)\n"
+    
+    insights += "\n**Medium Priority (Growth Potential):**\n"
+    insights += "- Stores with 5-10% month-over-month growth\n"
+    insights += "- New stores (< 6 months) showing promise\n"
+    
+    insights += "\n**Attention Needed:**\n"
+    insights += "- Stores with declining orders\n"
+    insights += "- Stores with erratic ordering patterns\n"
+    
+    return insights
+
+@app.route("/store-demand-causes", methods=["POST"])
+def store_demand_causes():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean data
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+
+        # Process data
+        prophet_df = detect_format_and_process(df)
+        
+        # Find date and outlet columns from original df
+        date_col = None
+        outlet_col = None
+        for col in df.columns:
+            if col.lower().strip() in ['date', 'datetime', 'ds', 'day']:
+                date_col = col
+            elif 'outlet' in col.lower():
+                outlet_col = col
+        
+        if not outlet_col or not date_col:
+            return jsonify({"causes": []})
+        
+        # Parse dates
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        df = df.dropna(subset=[date_col])
+        
+        # Calculate total sales per store
+        sku_cols = [col for col in df.columns if col not in [date_col, outlet_col]]
+        for col in sku_cols:
+            df[col] = parse_num_series(df[col])
+        df['total'] = df[sku_cols].sum(axis=1)
+        
+        # Analyze each store
+        store_causes = []
+        for store in df[outlet_col].unique():
+            store_data = df[df[outlet_col] == store].copy()
+            store_data = store_data.sort_values(date_col)
+            
+            if len(store_data) < 7:
+                continue
+            
+            # Calculate trends
+            recent_avg = store_data.tail(7)['total'].mean()
+            overall_avg = store_data['total'].mean()
+            
+            # Detect patterns
+            cause = ""
+            status = "normal"
+            
+            if recent_avg < overall_avg * 0.3:
+                cause = "🔴 Significantly reduced ordering (possible stock issues or closing)"
+                status = "critical"
+            elif recent_avg < overall_avg * 0.6:
+                cause = "⚠️ Decreased ordering (may need follow-up)"
+                status = "warning"
+            elif recent_avg > overall_avg * 1.5:
+                cause = "📈 Increased ordering (high demand or promotion)"
+                status = "good"
+            elif store_data['total'].std() > overall_avg * 0.8:
+                cause = "📊 Highly variable ordering pattern"
+                status = "variable"
+            else:
+                cause = "✅ Stable ordering pattern"
+                status = "stable"
+            
+            # Check for stopped ordering
+            days_since_last_order = (df[date_col].max() - store_data[date_col].max()).days
+            if days_since_last_order > 14:
+                cause = f"❌ Stopped ordering ({days_since_last_order} days ago)"
+                status = "stopped"
+            
+            store_causes.append({
+                "store": str(store),
+                "cause": cause,
+                "status": status,
+                "recent_avg": float(recent_avg),
+                "overall_avg": float(overall_avg),
+                "days_since_last_order": int(days_since_last_order),
+                "total_orders": int(len(store_data))
+            })
+        
+        # Sort by status priority
+        priority = {"stopped": 0, "critical": 1, "warning": 2, "variable": 3, "good": 4, "stable": 5}
+        store_causes.sort(key=lambda x: priority.get(x['status'], 99))
+        
+        return jsonify({"causes": store_causes})
+
+    except Exception as e:
+        import traceback
+        print(f"Store demand causes error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+    
+@app.route("/store-analytics", methods=["POST"])
+def store_analytics():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean duplicate headers
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                          (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+
+        # Fill numeric columns
+        for col in df.columns[2:]:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Total demand per store
+        df['total'] = df.iloc[:, 2:].sum(axis=1)
+        store_totals = df.groupby('OUTLET')['total'].sum().sort_values(ascending=False)
+        
+        # Days with highest demand per store
+        store_days = df.groupby(['OUTLET', 'DATE'])['total'].sum().reset_index()
+        top_days = store_days.groupby('OUTLET').apply(lambda x: x.sort_values('total', ascending=False).head(3).to_dict(orient='records')).to_dict()
+        
+        # Top stores
+        top_stores = store_totals.head(5).to_dict()
+
+        return jsonify({
+            "top_buyers": [{"name": k, "sales": v} for k, v in top_stores.items()],
+            "store_demand_patterns": top_days,
+            "insights": "Store demand causes can be analyzed using causal analysis endpoint"
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Store analytics error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/causal-analysis-extended", methods=["POST"])
+def causal_analysis_extended():
+    try:
+        response = causal_analysis()  # reuse existing function
+        data = response.get_json()
+        
+        # Additional store-level causes (simplified example)
+        data['store_demand_causes'] = [
+            {"store": "RO8", "reason": "Promotion last week"},
+            {"store": "PUDOL", "reason": "Stopped ordering due to low stock"}
+        ]
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+
+import requests
+import json
+
+GEMINI_API_KEY = "AIzaSyDls9Ny2ciONGXc-QC5QI1o77eXtaWGydE"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
+@app.route("/full-report", methods=["POST"])
+def full_report():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean and process data
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+        
+        prophet_df = detect_format_and_process(df)
+        
+        # Generate comprehensive summary
+        total_sales = prophet_df['y'].sum()
+        avg_daily = prophet_df['y'].mean()
+        peak_sales = prophet_df['y'].max()
+        
+        prophet_df['month'] = prophet_df['ds'].dt.month
+        monthly_avg = prophet_df.groupby('month')['y'].mean().to_dict()
+        
+        summary = {
+            "total_sales": int(total_sales),
+            "average_daily_sales": int(avg_daily),
+            "peak_sales": int(peak_sales),
+            "monthly_averages": {calendar.month_abbr[k]: int(v) for k, v in monthly_avg.items()},
+            "date_range": f"{prophet_df['ds'].min().date()} to {prophet_df['ds'].max().date()}"
+        }
+        
+        prompt = f"""Analyze this beverage sales data and provide strategic insights:
+
+Sales Summary:
+- Total Sales: {summary['total_sales']:,} units
+- Average Daily Sales: {summary['average_daily_sales']:,} units
+- Peak Sales Day: {summary['peak_sales']:,} units
+- Date Range: {summary['date_range']}
+
+Monthly Averages:
+{json.dumps(summary['monthly_averages'], indent=2)}
+
+Provide a comprehensive report with:
+1. **Sales Performance Analysis**: Key trends and patterns
+2. **Seasonal Insights**: Best and worst performing months
+3. **Store Expansion Recommendations**: Which stores to prioritize based on sales
+4. **Inventory Stocking Strategy**: Optimal stock levels for different periods
+5. **Risk Assessment**: Potential stockout periods
+6. **Action Items**: Top 3 immediate actions to improve sales
+
+Format the response in clear sections with bullet points."""
+
+        # Correct Gemini API format
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": prompt
+                }]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 2048,
+                "topP": 0.95,
+                "topK": 40
+            }
+        }
+
+        url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
+        resp = requests.post(url_with_key, headers=headers, json=payload, timeout=30)
+        
+        if resp.status_code != 200:
+            return jsonify({"error": "Gemini API call failed", "details": resp.text}), 500
+        
+        result = resp.json()
+        generated_text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+        
+        return jsonify({
+            "full_report": generated_text,
+            "summary_data": summary,
+            "generated_by": "Gemini 2.5 Flash"
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Full report error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+    
+@app.route("/category-analysis", methods=["POST"])
+def category_analysis():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean duplicate headers
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+
+        # Identify SKU columns (everything except DATE and OUTLET)
+        date_col = None
+        outlet_col = None
+        
+        for col in df.columns:
+            if col.lower().strip() in ['date', 'datetime', 'ds', 'day']:
+                date_col = col
+            elif 'outlet' in col.lower():
+                outlet_col = col
+        
+        sku_cols = [col for col in df.columns if col not in [date_col, outlet_col]]
+        
+        # Analyze by bottle size (assuming SKU names contain size info like "1L", "500ML", etc.)
+        bottle_sizes = {}
+        categories = {}
+        
+        for sku in sku_cols:
+            # Convert to numeric
+            df[sku] = parse_num_series(df[sku])
+            total_sales = df[sku].sum()
+            
+            # Extract bottle size from SKU name
+            sku_upper = sku.upper()
+            if 'L' in sku_upper or 'ML' in sku_upper or 'LITER' in sku_upper:
+                # Try to extract size
+                import re
+                size_match = re.search(r'(\d+\.?\d*)\s*(L|ML|LITER)', sku_upper)
+                if size_match:
+                    size = size_match.group(0)
+                    bottle_sizes[size] = bottle_sizes.get(size, 0) + total_sales
+            
+            # Categorize by product type (you can customize this logic)
+            if any(keyword in sku_upper for keyword in ['WATER', 'MINERAL']):
+                categories['Water'] = categories.get('Water', 0) + total_sales
+            elif any(keyword in sku_upper for keyword in ['COKE', 'PEPSI', 'COLA', 'SODA']):
+                categories['Carbonated'] = categories.get('Carbonated', 0) + total_sales
+            elif any(keyword in sku_upper for keyword in ['JUICE', 'ORANGE', 'APPLE', 'MANGO']):
+                categories['Juice'] = categories.get('Juice', 0) + total_sales
+            elif any(keyword in sku_upper for keyword in ['ENERGY', 'RED BULL', 'GATORADE']):
+                categories['Energy/Sports'] = categories.get('Energy/Sports', 0) + total_sales
+            else:
+                categories['Other'] = categories.get('Other', 0) + total_sales
+        
+        # Sort by sales
+        bottle_sizes = dict(sorted(bottle_sizes.items(), key=lambda x: x[1], reverse=True))
+        categories = dict(sorted(categories.items(), key=lambda x: x[1], reverse=True))
+        
+        return jsonify({
+            "bottle_sizes": [{"size": k, "sales": float(v)} for k, v in bottle_sizes.items()],
+            "categories": [{"category": k, "sales": float(v)} for k, v in categories.items()],
+            "total_skus": len(sku_cols)
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Category analysis error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+    
+
+
+@app.route("/causal-factors-report", methods=["POST"])
+def causal_factors_report():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean data
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+
+        prophet_df = detect_format_and_process(df)
+        
+        if prophet_df.empty:
+            return jsonify({"factors": []})
+
+        # Analyze external factors
+        prophet_df['month'] = prophet_df['ds'].dt.month
+        prophet_df['day_of_week'] = prophet_df['ds'].dt.dayofweek
+        prophet_df['is_weekend'] = prophet_df['day_of_week'].isin([5, 6])
+        
+        # Calculate correlations
+        avg_sales = prophet_df['y'].mean()
+        
+        factors = []
+        
+        # Weekend effect
+        weekend_sales = prophet_df[prophet_df['is_weekend']]['y'].mean()
+        weekend_impact = ((weekend_sales - avg_sales) / avg_sales * 100) if avg_sales > 0 else 0
+        factors.append({
+            "factor": "Weekend Effect",
+            "impact": round(float(weekend_impact), 2)
+        })
+        
+        # Monthly seasonality
+        monthly_avg = prophet_df.groupby('month')['y'].mean()
+        peak_month = monthly_avg.idxmax()
+        peak_impact = ((monthly_avg.max() - avg_sales) / avg_sales * 100) if avg_sales > 0 else 0
+        factors.append({
+            "factor": f"Peak Season ({calendar.month_abbr[peak_month]})",
+            "impact": round(float(peak_impact), 2)
+        })
+        
+        # Trend analysis
+        first_half = prophet_df.iloc[:len(prophet_df)//2]['y'].mean()
+        second_half = prophet_df.iloc[len(prophet_df)//2:]['y'].mean()
+        trend_impact = ((second_half - first_half) / first_half * 100) if first_half > 0 else 0
+        factors.append({
+            "factor": "Overall Trend",
+            "impact": round(float(trend_impact), 2)
+        })
+
+        return jsonify({
+            "factors": factors,
+            "insights": "External factors analysis based on historical patterns"
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Causal factors report error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+    
+
+@app.route("/full-reports", methods=["POST"])
+def full_reports():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean data
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+
+        prophet_df = detect_format_and_process(df)
+        
+        if prophet_df.empty:
+            return jsonify({"monthly": [], "weekly": [], "yearly": []})
+
+        # Monthly reports
+        prophet_df['year_month'] = prophet_df['ds'].dt.to_period('M')
+        monthly = prophet_df.groupby('year_month')['y'].sum().reset_index()
+        monthly['month'] = monthly['year_month'].astype(str)
+        monthly_data = monthly[['month', 'y']].rename(columns={'y': 'total_sales'}).to_dict('records')
+
+        # Weekly reports
+        prophet_df['year_week'] = prophet_df['ds'].dt.to_period('W')
+        weekly = prophet_df.groupby('year_week')['y'].sum().reset_index()
+        weekly['week'] = weekly['year_week'].astype(str)
+        weekly_data = weekly[['week', 'y']].rename(columns={'y': 'total_sales'}).to_dict('records')
+
+        # Yearly reports
+        prophet_df['year'] = prophet_df['ds'].dt.year
+        yearly = prophet_df.groupby('year')['y'].sum().reset_index()
+        yearly_data = yearly.rename(columns={'y': 'total_sales'}).to_dict('records')
+
+        return jsonify({
+            "monthly": monthly_data,
+            "weekly": weekly_data[:10],  # Last 10 weeks
+            "yearly": yearly_data
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Full reports error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+        
 @app.route("/causal-analysis", methods=["POST"])
 def causal_analysis():
     """Causal analysis endpoint"""

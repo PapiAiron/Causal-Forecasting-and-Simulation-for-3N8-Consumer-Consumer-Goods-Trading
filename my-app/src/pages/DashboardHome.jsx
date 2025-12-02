@@ -15,7 +15,8 @@ import {
   Search,
   Info,
   UserPlus,
-  Calendar
+  Calendar,
+  Truck
 } from 'lucide-react';
 import { auth, db } from "../firebase";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
@@ -447,6 +448,27 @@ const DashboardContent = ({ onNavigate }) => {
 
   // UPDATED: Dashboard cards (Overview removed, Settings added)
   const dashboardCards = [
+        {
+      id: 'delivery-tracking',
+      title: 'Delivery Tracking',
+      description: 'Track Deliveries & Performance Metrics',
+      icon: Truck,
+      stats: { Deliveries: '123', Damaged: '10' }
+    },
+        {
+      id: 'store-analytics',
+      title: 'Store Analytics',
+      description: 'Top Buyers, Demand Patterns & Sales Trends',
+      icon: BarChart3,
+      stats: { topStores: '12', peakDay: 'Wednesday' }
+    },
+        {
+      id: 'reporting',
+      title: 'Full Reporting System',
+      description: 'Monthly, weekly, and yearly sales + bottle category reports.',
+      icon: Calendar,
+      stats: { reports: '23',  Updated: 'Today' }
+    },
     {
       id: 'causal-analysis',
       title: 'Causal Analysis',
@@ -470,106 +492,195 @@ const DashboardContent = ({ onNavigate }) => {
     }
   ];
 
-  return (
-    <div className="pt-24">
-      <Header
-        title="Home"
-        description="Welcome back! Here's what's happening with your forecasting system today."
-        icon={Home}
-      />
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {dashboardCards.map((card) => {
-            const IconComponent = card.icon;
-            return (
-              <button
-                key={card.id}
-                onClick={() => onNavigate(card.id)}
-                className="text-left group"
-              >
-                <Card className="p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-                  <div className="flex items-center justify-between mb-4">
-                    <div 
-                      className="p-3 rounded-xl group-hover:scale-110 transition-all duration-300 shadow-lg"
-                      style={{ 
-                        backgroundColor: theme.chart,
-                        boxShadow: `0 8px 20px ${theme.chart}30`
-                      }}
-                    >
-                      <IconComponent className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="text-right">
-                      {card.id === 'causal-analysis' && (
-                        <>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">Top Factor</div>
-                          <div className="font-semibold" style={{ color: theme.chart }}>{card.stats.correlation}</div>
-                        </>
-                      )}
-                      {card.id === 'simulation' && (
-                        <>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">Last Run</div>
-                          <div className="font-semibold text-gray-900 dark:text-white">{card.stats.lastRun}</div>
-                        </>
-                      )}
-                      {card.id === 'settings' && (
-                        <>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">Current Theme</div>
-                          <div className="font-semibold" style={{ color: theme.chart }}>{card.stats.theme}</div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{card.title}</h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">{card.description}</p>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">
-                      {card.id === 'causal-analysis' && `${card.stats.factors} factors analyzed`}
-                      {card.id === 'simulation' && `${card.stats.scenarios} scenarios available`}
-                      {card.id === 'settings' && `Mode: ${card.stats.mode}`}
-                    </span>
-                    <span 
-                      className="font-medium group-hover:translate-x-2 transition-transform duration-300"
-                      style={{ color: theme.chart }}
-                    >
-                      View Details →
-                    </span>
-                  </div>
-                </Card>
-              </button>
-            );
-          })}
-        </div>
+ return (
+  <div className="pt-24">
+    <Header
+      title="Home"
+      description="Welcome back! Here's what's happening with your forecasting system today."
+      icon={Home}
+    />
+    
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Activity</h3>
-          <div className="space-y-3">
-            {[
-              { icon: Settings, title: 'Theme updated', desc: 'Changed to Ocean Blue theme', time: '1 hour ago' },
-              { icon: Play, title: 'Simulation completed', desc: 'Seasonal Peak scenario', time: '4 hours ago' },
-              { icon: TrendingUp, title: 'New causal factor identified', desc: 'Marketing spend correlation', time: '1 day ago' }
-            ].map((activity, index) => (
-              <div key={index} className="flex items-center space-x-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <div 
-                  className="p-2 rounded-xl shadow-sm"
-                  style={{ 
-                    backgroundColor: theme.secondary || (theme.chart + '20'), 
-                    color: theme.chart 
-                  }}
-                >
-                  <activity.icon className="w-4 h-4" />
+      {/* DASHBOARD CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {dashboardCards.map((card) => {
+          const IconComponent = card.icon;
+          return (
+            <button
+              key={card.id}
+              onClick={() => onNavigate(card.id)}
+              className="text-left group"
+            >
+              <Card className="p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                <div className="flex items-center justify-between mb-4">
+                  <div
+                    className="p-3 rounded-xl group-hover:scale-110 transition-all duration-300 shadow-lg"
+                    style={{
+                      backgroundColor: theme.chart,
+                      boxShadow: `0 8px 20px ${theme.chart}30`,
+                    }}
+                  >
+                    <IconComponent className="w-6 h-6 text-white" />
+                  </div>
+
+                  <div className="text-right">
+                    {card.id === "causal-analysis" && (
+                      <>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Top Factor
+                        </div>
+                        <div
+                          className="font-semibold"
+                          style={{ color: theme.chart }}
+                        >
+                          {card.stats.correlation}
+                        </div>
+                      </>
+                    )}
+
+                    {card.id === "simulation" && (
+                      <>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Last Run
+                        </div>
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {card.stats.lastRun}
+                        </div>
+                      </>
+                    )}
+
+                    {card.id === "settings" && (
+                      <>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Current Theme
+                        </div>
+                        <div
+                          className="font-semibold"
+                          style={{ color: theme.chart }}
+                        >
+                          {card.stats.theme}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{activity.title}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{activity.desc} • {activity.time}</p>
+
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {card.title}
+                </h3>
+
+                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+                  {card.description}
+                </p>
+
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {card.id === "causal-analysis" &&
+                      `${card.stats.factors} factors analyzed`}
+                    {card.id === "simulation" &&
+                      `${card.stats.scenarios} scenarios available`}
+                    {card.id === "settings" && `Mode: ${card.stats.mode}`}
+                  </span>
+
+                  <span
+                    className="font-medium group-hover:translate-x-2 transition-transform duration-300"
+                    style={{ color: theme.chart }}
+                  >
+                    View Details →
+                  </span>
                 </div>
-              </div>
-            ))}
+              </Card>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* QUICK GLANCE SECTION */}
+      <Card className="p-6 mb-8">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Quick Glance Overview
+        </h3>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
+            <p className="text-sm text-gray-500">Inventory Level</p>
+            <p className="text-2xl font-bold">83%</p>
           </div>
-        </Card>
-      </main>
-    </div>
-  );
+
+          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
+            <p className="text-sm text-gray-500">Top Stores</p>
+            <p className="text-2xl font-bold">12</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
+            <p className="text-sm text-gray-500">Deliveries Made</p>
+            <p className="text-2xl font-bold">47</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
+            <p className="text-sm text-gray-500">Out for Delivery</p>
+            <p className="text-2xl font-bold">6</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* RECENT ACTIVITY */}
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Recent Activity
+        </h3>
+
+        <div className="space-y-3">
+          {[
+            {
+              icon: Settings,
+              title: "Theme updated",
+              desc: "Changed to Ocean Blue theme",
+              time: "1 hour ago",
+            },
+            {
+              icon: Play,
+              title: "Simulation completed",
+              desc: "Seasonal Peak scenario",
+              time: "4 hours ago",
+            },
+            {
+              icon: TrendingUp,
+              title: "New causal factor identified",
+              desc: "Marketing spend correlation",
+              time: "1 day ago",
+            },
+          ].map((activity, index) => (
+            <div
+              key={index}
+              className="flex items-center space-x-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <div
+                className="p-2 rounded-xl shadow-sm"
+                style={{
+                  backgroundColor: theme.secondary || theme.chart + "20",
+                  color: theme.chart,
+                }}
+              >
+                <activity.icon className="w-4 h-4" />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {activity.title}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {activity.desc} • {activity.time}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </main>
+  </div>
+);
 };
 
 const LayoutWrapper = ({ children, currentPage, onNavigate }) => {

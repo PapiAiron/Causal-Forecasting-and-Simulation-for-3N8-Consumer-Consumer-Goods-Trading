@@ -19,6 +19,7 @@ import AdminUserVerification from "./pages/AdminUserVerification";
 import SettingsPage from "./pages/SettingsPage";
 import AppearanceSettings from "./pages/AppearanceSettings";
 import Chatbot from "./components/Chatbot";
+import DeliveryTracking from "./pages/DeliveryTracking";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState(() => {
@@ -237,6 +238,7 @@ const App = () => {
         {currentPage === "accountsettings" && <AccountSettings onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "manage-accounts" && <ManageAccounts onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "user-verification" && <AdminUserVerification onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "delivery-tracking" && <DeliveryTracking onNavigate={handleNavigation} onBack={onBack} />}
       </div>
       </PageTransition>
        {user && currentPage !== "login" && currentPage !== "signup" && currentPage !== "getstarted" && <Chatbot />}

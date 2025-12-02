@@ -79,8 +79,31 @@ def detect_format_and_process(df):
 def process_wide_format(df):
     """
     Convert wide format (Date, Outlet, SKU1, SKU2, ...) to (ds, y)
+    Handles PER-CASE sales data
     """
-    print("Processing WIDE format (Date-Outlet-SKUs)")
+    print("Processing WIDE format (Date-Outlet-SKUs) - PER CASE")
+    
+    # SKU to case quantity mapping
+    CASE_QUANTITIES = {
+        # Mountain Dew
+        'MD8': 24, 'MD12': 24, 'MD290': 24, 'MD750': 12, 'MD1L': 12, 
+        'MD1.25': 12, 'MD1.5': 12, 'MD1.5/6': 6,
+        # Pepsi
+        'P8': 24, 'P290': 24, 'P750': 12, 'P1L': 12, 
+        'P1.25': 12, 'P1.5': 12, 'P1.5/6': 6,
+        # 7Up
+        'S7': 24, 'SS8': 24, 'SS290': 24, 'SEV290': 24, 
+        'S1.25': 12, 'S1.5': 12,
+        # Gatorade
+        'GBB350': 24, 'GBB500': 24, 'GTF350': 24, 'GR500': 24, 
+        'GO500': 24, 'GB900': 12, 'GBB8': 24, 'GBB237': 24,
+        # Milkis
+        'MILKIS': 30, 'MILKIS500': 20,
+        # Tropicana
+        'TRO8': 24,
+        # Premier Water
+        'PW350': 24, 'PW500': 24, 'PW1L': 12
+    }
     
     # Find date column
     date_col = None
@@ -113,9 +136,19 @@ def process_wide_format(df):
     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
     df = df.dropna(subset=[date_col])
     
-    # Convert SKU columns to numeric and sum
+    # Convert cases to units and sum
+    print(f"Converting {len(sku_cols)} SKU columns from cases to units...")
     for col in sku_cols:
-        df[col] = parse_num_series(df[col])
+        cases = parse_num_series(df[col])
+        
+        # Find case quantity for this SKU
+        case_qty = CASE_QUANTITIES.get(col.strip(), 1)  # Default to 1 if SKU not found
+        
+        # Convert cases to units
+        df[col] = cases * case_qty
+        
+        if cases.sum() > 0:
+            print(f"  ✓ {col}: {cases.sum():.0f} cases × {case_qty} = {df[col].sum():.0f} units")
     
     df['total'] = df[sku_cols].sum(axis=1)
     
@@ -124,6 +157,7 @@ def process_wide_format(df):
     result.columns = ['ds', 'y']
     
     print(f"✓ Converted wide format: {len(result)} daily observations")
+    print(f"✓ Total units (all SKUs combined): {result['y'].sum():,.0f}")
     return result
 
 
@@ -131,7 +165,7 @@ def process_standard_format(df):
     """
     Process standard format (Date, SKU/Value columns)
     """
-    print("Processing STANDARD format")
+    print("Processing STANDARD format (assuming per-unit data)")
     
     # Normalize column names
     df.columns = [c.lower().strip() for c in df.columns]
@@ -1611,6 +1645,200 @@ def generate_inventory_decision(service_level, fill_rate, shortage_rate, stockou
         "success"
     )
 
+@app.route("/sku-info", methods=["GET"])
+def sku_info():
+    """Return SKU case quantity information"""
+    CASE_QUANTITIES = {
+        'MD8': 24, 'MD12': 24, 'MD290': 24, 'MD750': 12, 'MD1L': 12, 
+        'MD1.25': 12, 'MD1.5': 12, 'MD1.5/6': 6,
+        'P8': 24, 'P290': 24, 'P750': 12, 'P1L': 12, 
+        'P1.25': 12, 'P1.5': 12, 'P1.5/6': 6,
+        'S7': 24, 'SS8': 24, 'SS290': 24, 'SEV290': 24, 
+        'S1.25': 12, 'S1.5': 12,
+        'GBB350': 24, 'GBB500': 24, 'GTF350': 24, 'GR500': 24, 
+        'GO500': 24, 'GB900': 12, 'GBB8': 24, 'GBB237': 24,
+        'MILKIS': 30, 'MILKIS500': 20,
+        'TRO8': 24,
+        'PW350': 24, 'PW500': 24, 'PW1L': 12
+    }
+    return jsonify({"sku_case_quantities": CASE_QUANTITIES})
 
+@app.route("/sales-query", methods=["POST"])
+def sales_query():
+    """
+    Query exact sales for specific date ranges
+    Supports: specific date, week, month, year, or custom range
+    """
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        query_type = request.form.get("query_type", "date")  # date, week, month, year, custom
+        query_value = request.form.get("query_value", "")  # e.g., "2023-03-15", "2023-03", "2023"
+        start_date = request.form.get("start_date", "")  # for custom range
+        end_date = request.form.get("end_date", "")  # for custom range
+        
+        # Load and process data
+        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
+        
+        # Clean duplicate headers
+        if df.shape[1] >= 2:
+            second_col = df.columns[1]
+            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
+                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
+            df = df.loc[~mask_header].reset_index(drop=True)
+
+        prophet_df = detect_format_and_process(df)
+        
+        if prophet_df.empty:
+            return jsonify({"error": "No valid data after processing"}), 400
+
+        # Parse dates
+        prophet_df['date'] = pd.to_datetime(prophet_df['ds'])
+        prophet_df['year'] = prophet_df['date'].dt.year
+        prophet_df['month'] = prophet_df['date'].dt.month
+        prophet_df['week'] = prophet_df['date'].dt.isocalendar().week
+        prophet_df['day_of_week'] = prophet_df['date'].dt.day_name()
+        
+        result = {}
+        
+        if query_type == "date":
+            # Specific date query
+            query_date = pd.to_datetime(query_value)
+            matched = prophet_df[prophet_df['date'] == query_date]
+            
+            if len(matched) > 0:
+                result = {
+                    "query_type": "Specific Date",
+                    "query_value": query_value,
+                    "total_sales": int(matched['y'].sum()),
+                    "date": query_value,
+                    "day_of_week": matched.iloc[0]['day_of_week'],
+                    "found": True
+                }
+            else:
+                result = {
+                    "query_type": "Specific Date",
+                    "query_value": query_value,
+                    "found": False,
+                    "message": "No sales data found for this date"
+                }
+        
+        elif query_type == "week":
+            # Week query (format: "2023-W10")
+            year, week = query_value.split('-W')
+            year = int(year)
+            week = int(week)
+            
+            matched = prophet_df[(prophet_df['year'] == year) & (prophet_df['week'] == week)]
+            
+            if len(matched) > 0:
+                result = {
+                    "query_type": "Week",
+                    "query_value": query_value,
+                    "total_sales": int(matched['y'].sum()),
+                    "average_daily": int(matched['y'].mean()),
+                    "days_count": len(matched),
+                    "date_range": f"{matched['date'].min().date()} to {matched['date'].max().date()}",
+                    "daily_breakdown": matched[['date', 'y']].rename(columns={'y': 'sales'}).to_dict('records'),
+                    "found": True
+                }
+            else:
+                result = {"query_type": "Week", "query_value": query_value, "found": False}
+        
+        elif query_type == "month":
+            # Month query (format: "2023-03")
+            year, month = query_value.split('-')
+            year = int(year)
+            month = int(month)
+            
+            matched = prophet_df[(prophet_df['year'] == year) & (prophet_df['month'] == month)]
+            
+            if len(matched) > 0:
+                # Weekly breakdown
+                weekly = matched.groupby('week')['y'].sum().to_dict()
+                
+                result = {
+                    "query_type": "Month",
+                    "query_value": query_value,
+                    "month_name": calendar.month_name[month],
+                    "total_sales": int(matched['y'].sum()),
+                    "average_daily": int(matched['y'].mean()),
+                    "days_count": len(matched),
+                    "peak_day": {
+                        "date": str(matched.loc[matched['y'].idxmax()]['date'].date()),
+                        "sales": int(matched['y'].max())
+                    },
+                    "lowest_day": {
+                        "date": str(matched.loc[matched['y'].idxmin()]['date'].date()),
+                        "sales": int(matched['y'].min())
+                    },
+                    "weekly_breakdown": {f"Week {k}": int(v) for k, v in weekly.items()},
+                    "daily_breakdown": matched[['date', 'y']].rename(columns={'y': 'sales'}).to_dict('records'),
+                    "found": True
+                }
+            else:
+                result = {"query_type": "Month", "query_value": query_value, "found": False}
+        
+        elif query_type == "year":
+            # Year query (format: "2023")
+            year = int(query_value)
+            matched = prophet_df[prophet_df['year'] == year]
+            
+            if len(matched) > 0:
+                # Monthly breakdown
+                monthly = matched.groupby('month')['y'].sum().to_dict()
+                
+                result = {
+                    "query_type": "Year",
+                    "query_value": query_value,
+                    "total_sales": int(matched['y'].sum()),
+                    "average_daily": int(matched['y'].mean()),
+                    "days_count": len(matched),
+                    "peak_month": {
+                        "month": calendar.month_name[matched.groupby('month')['y'].sum().idxmax()],
+                        "sales": int(matched.groupby('month')['y'].sum().max())
+                    },
+                    "monthly_breakdown": {calendar.month_abbr[k]: int(v) for k, v in monthly.items()},
+                    "found": True
+                }
+            else:
+                result = {"query_type": "Year", "query_value": query_value, "found": False}
+        
+        elif query_type == "custom":
+            # Custom date range
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            
+            matched = prophet_df[(prophet_df['date'] >= start) & (prophet_df['date'] <= end)]
+            
+            if len(matched) > 0:
+                result = {
+                    "query_type": "Custom Range",
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "total_sales": int(matched['y'].sum()),
+                    "average_daily": int(matched['y'].mean()),
+                    "days_count": len(matched),
+                    "peak_day": {
+                        "date": str(matched.loc[matched['y'].idxmax()]['date'].date()),
+                        "sales": int(matched['y'].max())
+                    },
+                    "daily_breakdown": matched[['date', 'y']].rename(columns={'y': 'sales'}).to_dict('records'),
+                    "found": True
+                }
+            else:
+                result = {"query_type": "Custom Range", "found": False}
+        
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        print(f"Sales query error: {e}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+    
+    
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

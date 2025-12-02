@@ -61,7 +61,24 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [activeInsightTab, setActiveInsightTab] = useState('overview');
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoadingFromFirebase, setIsLoadingFromFirebase] = useState(true);
-
+  const [salesMetrics, setSalesMetrics] = useState({
+    today: 0,
+    week: 0,
+    month: 0,
+    year: 0,
+    todayChange: 0,
+    weekChange: 0,
+    monthChange: 0,
+    yearChange: 0
+  });
+  const [selectedMetricPeriod, setSelectedMetricPeriod] = useState('month');
+  const [salesQueryResult, setSalesQueryResult] = useState(null);
+  const [showSalesQuery, setShowSalesQuery] = useState(false);
+  const [queryType, setQueryType] = useState('date');
+  const [queryValue, setQueryValue] = useState('');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [isQuerying, setIsQuerying] = useState(false);
   // Monitor authentication state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -596,28 +613,189 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     setCausalEvents(updatedEvents);
     
     if (file) {
-  await runForecastWithEvents(file, updatedEvents);
-  
-  // Save to Firestore with updated events
-  setTimeout(async () => {
-    if (currentUser) {
-      await saveCurrentStateToFirestore(currentUser.uid, file.name, {
-        scenarioGraph,
-        forecastPayload,
-        decisions,
-        featureImportance,
-        causalEvents: updatedEvents,
-        storeAnalytics,
-        causalFactorAnalysis,
-        fullReports,
-        decisionSupport,
-        categoryAnalysis,
-        storeDemandCauses
-      });
+      await runForecastWithEvents(file, updatedEvents);
+      
+      // Save to Firestore with updated events
+      setTimeout(async () => {
+        if (currentUser) {
+          await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+            scenarioGraph,
+            forecastPayload,
+            decisions,
+            featureImportance,
+            causalEvents: updatedEvents,
+            storeAnalytics,
+            causalFactorAnalysis,
+            fullReports,
+            decisionSupport,
+            categoryAnalysis,
+            storeDemandCauses
+          });
+        }
+      }, 500);
     }
-  }, 500);
-}
   };
+
+  const handleSalesQuery = async () => {
+    if (!file) {
+      setError('Please upload a file first');
+      return;
+    }
+
+    setIsQuerying(true);
+    setError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('query_type', queryType);
+      
+      if (queryType === 'custom') {
+        if (!customStartDate || !customEndDate) {
+          setError('Please select both start and end dates');
+          setIsQuerying(false);
+          return;
+        }
+        formData.append('start_date', customStartDate);
+        formData.append('end_date', customEndDate);
+      } else {
+        if (!queryValue) {
+          setError('Please enter a date/period to query');
+          setIsQuerying(false);
+          return;
+        }
+        formData.append('query_value', queryValue);
+      }
+
+      const response = await fetch('http://127.0.0.1:5000/sales-query', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text() || 'Query failed');
+      }
+
+      const data = await response.json();
+      setSalesQueryResult(data);
+      
+    } catch (err) {
+      console.error('Sales query error:', err);
+      setError(String(err.message || err));
+    } finally {
+      setIsQuerying(false);
+    }
+  };
+  const calculateSalesMetrics = (data) => {
+    if (!data || data.length === 0) return;
+
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    // Get week boundaries
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    
+    // Get month boundaries
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    // Get year boundaries
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearEnd = new Date(now.getFullYear(), 11, 31);
+    
+    // Previous periods for comparison
+    const prevWeekStart = new Date(weekStart);
+    prevWeekStart.setDate(weekStart.getDate() - 7);
+    const prevWeekEnd = new Date(weekEnd);
+    prevWeekEnd.setDate(weekEnd.getDate() - 7);
+    
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    
+    const prevYearStart = new Date(now.getFullYear() - 1, 0, 1);
+    const prevYearEnd = new Date(now.getFullYear() - 1, 11, 31);
+    
+    // Calculate metrics
+    let todaySales = 0;
+    let weekSales = 0;
+    let monthSales = 0;
+    let yearSales = 0;
+    let prevWeekSales = 0;
+    let prevMonthSales = 0;
+    let prevYearSales = 0;
+    let yesterdaySales = 0;
+    
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    data.forEach(row => {
+      const rowDate = new Date(row.ds);
+      const rowDateStr = row.ds.split('T')[0];
+      const value = row.actual || 0;
+      
+      // Today
+      if (rowDateStr === today) {
+        todaySales += value;
+      }
+      
+      // Yesterday
+      if (rowDateStr === yesterdayStr) {
+        yesterdaySales += value;
+      }
+      
+      // This week
+      if (rowDate >= weekStart && rowDate <= weekEnd) {
+        weekSales += value;
+      }
+      
+      // Previous week
+      if (rowDate >= prevWeekStart && rowDate <= prevWeekEnd) {
+        prevWeekSales += value;
+      }
+      
+      // This month
+      if (rowDate >= monthStart && rowDate <= monthEnd) {
+        monthSales += value;
+      }
+      
+      // Previous month
+      if (rowDate >= prevMonthStart && rowDate <= prevMonthEnd) {
+        prevMonthSales += value;
+      }
+      
+      // This year
+      if (rowDate >= yearStart && rowDate <= yearEnd) {
+        yearSales += value;
+      }
+      
+      // Previous year
+      if (rowDate >= prevYearStart && rowDate <= prevYearEnd) {
+        prevYearSales += value;
+      }
+    });
+    
+    // Calculate percentage changes
+    const todayChange = yesterdaySales > 0 ? ((todaySales - yesterdaySales) / yesterdaySales * 100) : 0;
+    const weekChange = prevWeekSales > 0 ? ((weekSales - prevWeekSales) / prevWeekSales * 100) : 0;
+    const monthChange = prevMonthSales > 0 ? ((monthSales - prevMonthSales) / prevMonthSales * 100) : 0;
+    const yearChange = prevYearSales > 0 ? ((yearSales - prevYearSales) / prevYearSales * 100) : 0;
+    
+    setSalesMetrics({
+      today: Math.round(todaySales),
+      week: Math.round(weekSales),
+      month: Math.round(monthSales),
+      year: Math.round(yearSales),
+      todayChange: todayChange,
+      weekChange: weekChange,
+      monthChange: monthChange,
+      yearChange: yearChange
+    });
+  };
+
 
   const aggregateData = (data, view) => {
     if (!data?.length || view === 'daily') return data || [];
@@ -669,6 +847,116 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       grouped[groupKey].totalImpact += (item.totalImpact || 0);
       scenarioGraph?.eventNames?.forEach(eventName => { if (item[eventName]) grouped[groupKey][eventName] += item[eventName]; });
     });
+
+  const calculateSalesMetrics = (data) => {
+      if (!data || data.length === 0) return;
+
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      
+      // Get week boundaries
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      
+      // Get month boundaries
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      
+      // Get year boundaries
+      const yearStart = new Date(now.getFullYear(), 0, 1);
+      const yearEnd = new Date(now.getFullYear(), 11, 31);
+      
+      // Previous periods for comparison
+      const prevWeekStart = new Date(weekStart);
+      prevWeekStart.setDate(weekStart.getDate() - 7);
+      const prevWeekEnd = new Date(weekEnd);
+      prevWeekEnd.setDate(weekEnd.getDate() - 7);
+      
+      const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      
+      const prevYearStart = new Date(now.getFullYear() - 1, 0, 1);
+      const prevYearEnd = new Date(now.getFullYear() - 1, 11, 31);
+      
+      // Calculate metrics
+      let todaySales = 0;
+      let weekSales = 0;
+      let monthSales = 0;
+      let yearSales = 0;
+      let prevWeekSales = 0;
+      let prevMonthSales = 0;
+      let prevYearSales = 0;
+      let yesterdaySales = 0;
+      
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      
+      data.forEach(row => {
+        const rowDate = new Date(row.ds);
+        const rowDateStr = row.ds.split('T')[0];
+        const value = row.actual || 0;
+        
+        // Today
+        if (rowDateStr === today) {
+          todaySales += value;
+        }
+        
+        // Yesterday
+        if (rowDateStr === yesterdayStr) {
+          yesterdaySales += value;
+        }
+        
+        // This week
+        if (rowDate >= weekStart && rowDate <= weekEnd) {
+          weekSales += value;
+        }
+        
+        // Previous week
+        if (rowDate >= prevWeekStart && rowDate <= prevWeekEnd) {
+          prevWeekSales += value;
+        }
+        
+        // This month
+        if (rowDate >= monthStart && rowDate <= monthEnd) {
+          monthSales += value;
+        }
+        
+        // Previous month
+        if (rowDate >= prevMonthStart && rowDate <= prevMonthEnd) {
+          prevMonthSales += value;
+        }
+        
+        // This year
+        if (rowDate >= yearStart && rowDate <= yearEnd) {
+          yearSales += value;
+        }
+        
+        // Previous year
+        if (rowDate >= prevYearStart && rowDate <= prevYearEnd) {
+          prevYearSales += value;
+        }
+      });
+      
+      // Calculate percentage changes
+      const todayChange = yesterdaySales > 0 ? ((todaySales - yesterdaySales) / yesterdaySales * 100) : 0;
+      const weekChange = prevWeekSales > 0 ? ((weekSales - prevWeekSales) / prevWeekSales * 100) : 0;
+      const monthChange = prevMonthSales > 0 ? ((monthSales - prevMonthSales) / prevMonthSales * 100) : 0;
+      const yearChange = prevYearSales > 0 ? ((yearSales - prevYearSales) / prevYearSales * 100) : 0;
+      
+      setSalesMetrics({
+        today: Math.round(todaySales),
+        week: Math.round(weekSales),
+        month: Math.round(monthSales),
+        year: Math.round(yearSales),
+        todayChange: todayChange,
+        weekChange: weekChange,
+        monthChange: monthChange,
+        yearChange: yearChange
+      });
+    };
     
     return Object.values(grouped).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).map(g => {
       const result = { ...g };
@@ -685,15 +973,20 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 shadow-xl">
-        <p className="text-white font-semibold mb-2">{label}</p>
+      <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl max-w-xs">
+        <p className="text-white font-semibold text-xs mb-2">{label}</p>
         <div className="space-y-1">
-          {payload.map((entry, i) => (
-            <div key={i} className="flex items-center justify-between space-x-4">
-              <span className="text-sm" style={{ color: entry.color }}>{entry.name}:</span>
-              <span className="text-sm font-bold text-white">{entry.value ? Math.round(entry.value).toLocaleString() : '—'}</span>
+          {payload.slice(0, 5).map((entry, i) => (
+            <div key={i} className="flex items-center justify-between gap-3">
+              <span className="text-xs truncate" style={{ color: entry.color }}>{entry.name}:</span>
+              <span className="text-xs font-bold text-white whitespace-nowrap">
+                {entry.value ? Math.round(entry.value).toLocaleString() : '—'}
+              </span>
             </div>
           ))}
+          {payload.length > 5 && (
+            <p className="text-xs text-gray-400 mt-1">+{payload.length - 5} more</p>
+          )}
         </div>
       </div>
     );
@@ -705,6 +998,13 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const eventColors = {};
   causalEvents.forEach(event => { eventColors[`${event.typeLabel}_${event.id}`] = event.color; });
   const getChartHeight = () => ({ daily: 350, weekly: 320, monthly: 300, quarterly: 280 }[timeView] || 280);
+
+
+  useEffect(() => {
+    if (scenarioGraph?.rows?.length > 0) {
+      calculateSalesMetrics(scenarioGraph.rows);
+    }
+  }, [scenarioGraph]);
 
   if (isLoadingFromFirebase) {
     return (
@@ -727,13 +1027,270 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         icon={TrendingUp}
         onBack={onBack} />
         <main className="max-w-[85%] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          
+          {/* SALES METRICS DASHBOARD */}
+            {displayData.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Today Sales Card */}
+                <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-2 border-blue-200 dark:border-blue-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-blue-800 dark:text-blue-400">Today's Sales</h3>
+                    <div className={`flex items-center text-xs font-semibold ${salesMetrics.todayChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {salesMetrics.todayChange >= 0 ? '↑' : '↓'} {Math.abs(salesMetrics.todayChange).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-blue-900 dark:text-blue-300">
+                    {salesMetrics.today.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-blue-700 dark:text-blue-400 mt-2">
+                    vs yesterday
+                  </div>
+                </Card>
+
+                {/* This Week Card */}
+                <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-green-800 dark:text-green-400">This Week</h3>
+                    <div className={`flex items-center text-xs font-semibold ${salesMetrics.weekChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {salesMetrics.weekChange >= 0 ? '↑' : '↓'} {Math.abs(salesMetrics.weekChange).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-green-900 dark:text-green-300">
+                    {salesMetrics.week.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-green-700 dark:text-green-400 mt-2">
+                    vs last week
+                  </div>
+                </Card>
+
+                {/* This Month Card */}
+                <Card className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-2 border-purple-200 dark:border-purple-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-purple-800 dark:text-purple-400">This Month</h3>
+                    <div className={`flex items-center text-xs font-semibold ${salesMetrics.monthChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {salesMetrics.monthChange >= 0 ? '↑' : '↓'} {Math.abs(salesMetrics.monthChange).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-purple-900 dark:text-purple-300">
+                    {salesMetrics.month.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-purple-700 dark:text-purple-400 mt-2">
+                    vs last month
+                  </div>
+                </Card>
+
+                {/* This Year Card */}
+                <Card className="p-6 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-2 border-orange-200 dark:border-orange-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-orange-800 dark:text-orange-400">This Year</h3>
+                    <div className={`flex items-center text-xs font-semibold ${salesMetrics.yearChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {salesMetrics.yearChange >= 0 ? '↑' : '↓'} {Math.abs(salesMetrics.yearChange).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-orange-900 dark:text-orange-300">
+                    {salesMetrics.year.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-orange-700 dark:text-orange-400 mt-2">
+                    vs last year
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* DETAILED PERIOD BREAKDOWN */}
+              {displayData.length > 0 && (
+                <Card className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">📅 Period Breakdown</h3>
+                    <div className="flex gap-2">
+                      {['day', 'week', 'month', 'year'].map(period => (
+                        <button
+                          key={period}
+                          onClick={() => setSelectedMetricPeriod(period)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                            selectedMetricPeriod === period
+                              ? 'text-white shadow-lg'
+                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                          }`}
+                          style={selectedMetricPeriod === period ? { backgroundColor: theme.chart } : {}}
+                        >
+                          {period.charAt(0).toUpperCase() + period.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Chart */}
+                    <div className="lg:col-span-2">
+                      <div style={{ height: 300 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart 
+                            data={(() => {
+                              const now = new Date();
+                              let filteredData = [];
+                              
+                              if (selectedMetricPeriod === 'day') {
+                                // Last 30 days
+                                filteredData = scenarioGraph.rows
+                                  .filter(row => {
+                                    const rowDate = new Date(row.ds);
+                                    const daysAgo = Math.floor((now - rowDate) / (1000 * 60 * 60 * 24));
+                                    return daysAgo >= 0 && daysAgo <= 30 && row.actual !== null;
+                                  })
+                                  .map(row => ({
+                                    name: new Date(row.ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                                    value: row.actual
+                                  }))
+                                  .reverse();
+                              } else if (selectedMetricPeriod === 'week') {
+                                // Last 12 weeks
+                                const weeklyData = {};
+                                scenarioGraph.rows.forEach(row => {
+                                  const rowDate = new Date(row.ds);
+                                  const weekStart = new Date(rowDate);
+                                  weekStart.setDate(rowDate.getDate() - rowDate.getDay());
+                                  const weekKey = weekStart.toISOString().split('T')[0];
+                                  
+                                  if (!weeklyData[weekKey]) weeklyData[weekKey] = 0;
+                                  weeklyData[weekKey] += row.actual || 0;
+                                });
+                                
+                                filteredData = Object.entries(weeklyData)
+                                  .slice(-12)
+                                  .map(([date, value]) => ({
+                                    name: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                                    value: Math.round(value)
+                                  }));
+                              } else if (selectedMetricPeriod === 'month') {
+                                // Last 12 months
+                                const monthlyData = {};
+                                scenarioGraph.rows.forEach(row => {
+                                  const rowDate = new Date(row.ds);
+                                  const monthKey = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}`;
+                                  
+                                  if (!monthlyData[monthKey]) monthlyData[monthKey] = 0;
+                                  monthlyData[monthKey] += row.actual || 0;
+                                });
+                                
+                                filteredData = Object.entries(monthlyData)
+                                  .slice(-12)
+                                  .map(([date, value]) => ({
+                                    name: new Date(date + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+                                    value: Math.round(value)
+                                  }));
+                              } else {
+                                // Yearly
+                                const yearlyData = {};
+                                scenarioGraph.rows.forEach(row => {
+                                  const rowDate = new Date(row.ds);
+                                  const yearKey = rowDate.getFullYear().toString();
+                                  
+                                  if (!yearlyData[yearKey]) yearlyData[yearKey] = 0;
+                                  yearlyData[yearKey] += row.actual || 0;
+                                });
+                                
+                                filteredData = Object.entries(yearlyData)
+                                  .map(([year, value]) => ({
+                                    name: year,
+                                    value: Math.round(value)
+                                  }));
+                              }
+                              
+                              return filteredData;
+                            })()}
+                            margin={{ top: 5, right: 5, left: 5, bottom: 40 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                            <XAxis 
+                              dataKey="name" 
+                              stroke="#9CA3AF" 
+                              tick={{ fontSize: 10 }} 
+                              angle={-45} 
+                              textAnchor="end"
+                              height={50}
+                            />
+                            <YAxis stroke="#9CA3AF" tick={{ fontSize: 10 }} width={60} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Bar dataKey="value" fill={theme.chart} fillOpacity={0.8} name="Sales" radius={[4, 4, 0, 0]} />
+                            <Line type="monotone" dataKey="value" stroke={theme.chart} strokeWidth={2} dot={false} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Summary Stats */}
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Period</div>
+                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {selectedMetricPeriod === 'day' && salesMetrics.today.toLocaleString()}
+                          {selectedMetricPeriod === 'week' && salesMetrics.week.toLocaleString()}
+                          {selectedMetricPeriod === 'month' && salesMetrics.month.toLocaleString()}
+                          {selectedMetricPeriod === 'year' && salesMetrics.year.toLocaleString()}
+                        </div>
+                        <div className={`text-sm font-semibold mt-2 ${
+                          (selectedMetricPeriod === 'day' ? salesMetrics.todayChange :
+                          selectedMetricPeriod === 'week' ? salesMetrics.weekChange :
+                          selectedMetricPeriod === 'month' ? salesMetrics.monthChange :
+                          salesMetrics.yearChange) >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {(selectedMetricPeriod === 'day' ? salesMetrics.todayChange :
+                            selectedMetricPeriod === 'week' ? salesMetrics.weekChange :
+                            selectedMetricPeriod === 'month' ? salesMetrics.monthChange :
+                            salesMetrics.yearChange) >= 0 ? '↑' : '↓'} 
+                          {Math.abs(
+                            selectedMetricPeriod === 'day' ? salesMetrics.todayChange :
+                            selectedMetricPeriod === 'week' ? salesMetrics.weekChange :
+                            selectedMetricPeriod === 'month' ? salesMetrics.monthChange :
+                            salesMetrics.yearChange
+                          ).toFixed(1)}% vs previous
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-700">
+                        <div className="text-xs text-indigo-800 dark:text-indigo-400 mb-1">Average per {selectedMetricPeriod}</div>
+                        <div className="text-2xl font-bold text-indigo-900 dark:text-indigo-300">
+                          {(() => {
+                            const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
+                            if (historicalData.length === 0) return '0';
+                            const avg = historicalData.reduce((sum, d) => sum + d.actual, 0) / historicalData.length;
+                            return Math.round(avg).toLocaleString();
+                          })()}
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-gradient-to-br from-teal-50 to-green-50 dark:from-teal-900/20 dark:to-green-900/20 border border-teal-200 dark:border-teal-700">
+                        <div className="text-xs text-teal-800 dark:text-teal-400 mb-1">Peak Sales</div>
+                        <div className="text-2xl font-bold text-teal-900 dark:text-teal-300">
+                          {(() => {
+                            const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
+                            if (historicalData.length === 0) return '0';
+                            return Math.round(Math.max(...historicalData.map(d => d.actual))).toLocaleString();
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+
+          
           <div className="space-y-6">
-            
             <Card className="p-6">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
                   <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+
+                  {/* ADD THIS NEW SECTION */}
+                    <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                      <p className="text-xs text-blue-800 dark:text-blue-400 font-medium">
+                        📦 <strong>Per-Case Format Supported:</strong> Upload data with cases sold per SKU. 
+                        System automatically converts to units using SKU case quantities.
+                      </p>
+                    </div>
                   {file && (
                     <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Current file: {file.name}
@@ -795,6 +1352,264 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 })}
               </div>
             </Card>
+            {/* SALES QUERY CARD */}
+              <Card className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🔍 Sales Query</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Search exact sales for specific dates or periods</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowSalesQuery(!showSalesQuery)}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all hover:scale-105"
+                    style={{ backgroundColor: theme.chart }}
+                  >
+                    {showSalesQuery ? <X size={18} /> : <Plus size={18} />}
+                    <span>{showSalesQuery ? 'Close' : 'Open Query'}</span>
+                  </button>
+                </div>
+
+                {showSalesQuery && (
+                  <div className="space-y-4">
+                    {/* Query Type Selector */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                      {[
+                        { value: 'date', label: 'Specific Date' },
+                        { value: 'week', label: 'Week' },
+                        { value: 'month', label: 'Month' },
+                        { value: 'year', label: 'Year' },
+                        { value: 'custom', label: 'Custom Range' }
+                      ].map(type => (
+                        <button
+                          key={type.value}
+                          onClick={() => {
+                            setQueryType(type.value);
+                            setQueryValue('');
+                            setSalesQueryResult(null);
+                          }}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                            queryType === type.value
+                              ? 'text-white shadow-lg'
+                              : 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'
+                          }`}
+                          style={queryType === type.value ? { backgroundColor: theme.chart } : {}}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Query Input */}
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+                      {queryType === 'date' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Select Date
+                          </label>
+                          <input
+                            type="date"
+                            value={queryValue}
+                            onChange={(e) => setQueryValue(e.target.value)}
+                            className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                          />
+                        </div>
+                      )}
+
+                      {queryType === 'week' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Select Week (Format: 2023-W10)
+                          </label>
+                          <input
+                            type="week"
+                            value={queryValue}
+                            onChange={(e) => setQueryValue(e.target.value)}
+                            className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                          />
+                        </div>
+                      )}
+
+                      {queryType === 'month' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Select Month (Format: 2023-03)
+                          </label>
+                          <input
+                            type="month"
+                            value={queryValue}
+                            onChange={(e) => setQueryValue(e.target.value)}
+                            className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                          />
+                        </div>
+                      )}
+
+                      {queryType === 'year' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Enter Year (e.g., 2023)
+                          </label>
+                          <input
+                            type="number"
+                            value={queryValue}
+                            onChange={(e) => setQueryValue(e.target.value)}
+                            placeholder="2023"
+                            min="2000"
+                            max="2100"
+                            className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                          />
+                        </div>
+                      )}
+
+                      {queryType === 'custom' && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Start Date
+                            </label>
+                            <input
+                              type="date"
+                              value={customStartDate}
+                              onChange={(e) => setCustomStartDate(e.target.value)}
+                              className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              End Date
+                            </label>
+                            <input
+                              type="date"
+                              value={customEndDate}
+                              onChange={(e) => setCustomEndDate(e.target.value)}
+                              min={customStartDate}
+                              className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={handleSalesQuery}
+                        disabled={isQuerying || !file}
+                        className="w-full mt-4 py-2 rounded-xl text-white font-medium transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: theme.chart }}
+                      >
+                        {isQuerying ? 'Searching...' : '🔍 Search Sales'}
+                      </button>
+                    </div>
+
+                    {/* Query Results */}
+                    {salesQueryResult && (
+                      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-green-200 dark:border-green-800">
+                        {salesQueryResult.found ? (
+                          <>
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                                📊 {salesQueryResult.query_type} Results
+                              </h3>
+                              <button
+                                onClick={() => setSalesQueryResult(null)}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Key Metrics */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                              <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                                <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Total Sales</div>
+                                <div className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+                                  {salesQueryResult.total_sales?.toLocaleString()}
+                                </div>
+                                <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">units</div>
+                              </div>
+
+                              {salesQueryResult.average_daily && (
+                                <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                                  <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Daily</div>
+                                  <div className="text-2xl font-bold text-green-900 dark:text-green-300">
+                                    {salesQueryResult.average_daily?.toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-green-700 dark:text-green-400 mt-1">units/day</div>
+                                </div>
+                              )}
+
+                              {salesQueryResult.days_count && (
+                                <div className="p-3 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                                  <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Days</div>
+                                  <div className="text-2xl font-bold text-purple-900 dark:text-purple-300">
+                                    {salesQueryResult.days_count}
+                                  </div>
+                                  <div className="text-xs text-purple-700 dark:text-purple-400 mt-1">in period</div>
+                                </div>
+                              )}
+
+                              {salesQueryResult.day_of_week && (
+                                <div className="p-3 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
+                                  <div className="text-xs font-medium text-orange-800 dark:text-orange-400">Day</div>
+                                  <div className="text-lg font-bold text-orange-900 dark:text-orange-300">
+                                    {salesQueryResult.day_of_week}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Peak/Lowest Days */}
+                            {salesQueryResult.peak_day && (
+                              <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                                  <div className="text-xs font-medium text-green-800 dark:text-green-400 mb-1">🏆 Peak Day</div>
+                                  <div className="text-sm font-semibold text-green-900 dark:text-green-300">
+                                    {salesQueryResult.peak_day.date}
+                                  </div>
+                                  <div className="text-lg font-bold text-green-900 dark:text-green-300">
+                                    {salesQueryResult.peak_day.sales.toLocaleString()} units
+                                  </div>
+                                </div>
+
+                                {salesQueryResult.lowest_day && (
+                                  <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                                    <div className="text-xs font-medium text-red-800 dark:text-red-400 mb-1">📉 Lowest Day</div>
+                                    <div className="text-sm font-semibold text-red-900 dark:text-red-300">
+                                      {salesQueryResult.lowest_day.date}
+                                    </div>
+                                    <div className="text-lg font-bold text-red-900 dark:text-red-300">
+                                      {salesQueryResult.lowest_day.sales.toLocaleString()} units
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Additional Info */}
+                            {salesQueryResult.date_range && (
+                              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                📅 Period: {salesQueryResult.date_range}
+                              </p>
+                            )}
+
+                            {salesQueryResult.month_name && (
+                              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                📅 Month: {salesQueryResult.month_name} {salesQueryResult.query_value.split('-')[0]}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-center py-8">
+                            <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-yellow-500" />
+                            <p className="text-gray-900 dark:text-white font-semibold">No Data Found</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              {salesQueryResult.message || 'No sales data available for this period'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+
 
             {showEventModal && (
               <>
@@ -844,272 +1659,369 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 ">
-              {/* Chart 1: Combined Overview - Takes full width when alone, half when with others */}
-              <Card className="p-6 lg:col-span-2">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-center">Sales Overview</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 ">Historical data and forecast with events</p>
+            {/* MODERN GRID LAYOUT FOR CHARTS */}
+              <div className="space-y-6">
+                
+                {/* Row 1: Main Overview Chart (Full Width) */}
+                <Card className="p-6">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">📊 Sales Overview</h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Historical data and forecast with events</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
+                        <button 
+                          key={view} 
+                          onClick={() => setTimeView(view)} 
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            timeView === view 
+                              ? 'text-white shadow-lg scale-105' 
+                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                          }`} 
+                          style={timeView === view ? { backgroundColor: theme.chart } : {}}
+                        >
+                          {view.charAt(0).toUpperCase() + view.slice(1)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                  {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
-                    <button key={view} onClick={() => setTimeView(view)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${timeView === view ? 'text-white shadow-lg' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`} style={timeView === view ? { backgroundColor: theme.chart } : {}}>
-                      {view.charAt(0).toUpperCase() + view.slice(1)}
-                    </button>
-                  ))}
+
+                  {displayData.length > 0 ? (
+                    <div style={{ height: 400 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={displayData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                          <XAxis 
+                            dataKey="ds" 
+                            stroke="#9CA3AF" 
+                            tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                            angle={-45} 
+                            textAnchor="end" 
+                            height={60}
+                          />
+                          <YAxis stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} width={60} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px' }} iconSize={10} />
+                          
+                          {timeView === 'daily' || timeView === 'weekly' ? (
+                            <>
+                              <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.3} name="Baseline" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="predicted" fill={theme.chart} fillOpacity={0.7} name="Predicted" radius={[4, 4, 0, 0]} />
+                            </>
+                          ) : (
+                            <>
+                              <Area type="monotone" dataKey="upper" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Upper" />
+                              <Area type="monotone" dataKey="lower" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Lower" />
+                              <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} dot={false} name="Actual" />
+                              <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline" />
+                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={false} name="Predicted" />
+                            </>
+                          )}
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 text-gray-500 dark:text-gray-400">
+                      <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                      <p>Upload data to see forecast visualization</p>
+                    </div>
+                  )}
+
+                  {/* KPI Cards - Compact Grid */}
+                  {forecastPayload && displayData.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                        <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
+                        <div className="text-lg font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
+                      </div>
+                      
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                        <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Total Period</div>
+                        <div className="text-lg font-bold text-blue-900 dark:text-blue-300">{Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
+                      </div>
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                        <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Active Events</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">{causalEvents.length}</div>
+                      </div>
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
+                        <div className="text-xs font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
+                        <div className="text-lg font-bold text-orange-900 dark:text-orange-300">
+                          
+                                              {(() => {
+                            const totalPredicted = forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0);
+                            const totalBaseline = forecastData.reduce((sum, d) => sum + (d.baseline || 0), 0);
+                            const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
+                            return (impact > 0 ? '+' : '') + impact.toFixed(1);
+                          })()}%
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                      <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Total Units</div>
+                        <div className="text-lg font-bold text-blue-900 dark:text-blue-300">
+                        {Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}
+                      </div>
+                      <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">Converted from cases</div>
+                    </div>
+                    </div>
+                  )}
+                </Card>
+
+                {/* Row 2: Two Charts Side by Side */}
+                {displayData.length > 0 && forecastData.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    {/* Left: Event Impact Breakdown */}
+                    <Card className="p-6">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">📈 Event Impact</h3>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">How events affect forecast</p>
+                      
+                      {causalEvents.length === 0 ? (
+                        <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                          <Gift className="w-10 h-10 mx-auto mb-2 opacity-50 text-gray-400" />
+                          <p className="text-sm text-gray-500 dark:text-gray-400">No events added yet</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ height: 280 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ComposedChart data={forecastData} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
+                                <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline" radius={[3, 3, 0, 0]} />
+                                {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                                  const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                                  return <Bar key={eventName} dataKey={eventName} stackId="events" fill={color} fillOpacity={0.8} name={eventName.split('_').slice(0, -1).join(' ')} radius={idx === scenarioGraph.eventNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />;
+                                })}
+                                <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Total" />
+                              </ComposedChart>
+                            </ResponsiveContainer>
+                          </div>
+                          
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            {causalEvents.map((event) => {
+                              const eventKey = `${event.typeLabel}_${event.id}`;
+                              const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
+                              const Icon = event.icon;
+                              return (
+                                <div key={event.id} className="p-2 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Icon className="w-3 h-3" style={{ color: event.color }} />
+                                    <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">{event.typeLabel}</span>
+                                  </div>
+                                  <div className="text-sm font-bold" style={{ color: event.color }}>
+                                    {totalImpact > 0 ? '+' : ''}{Math.round(totalImpact).toLocaleString()}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </Card>
+
+                    {/* Right: Historical Sales */}
+                    {displayData.some(d => d.actual !== null) && (
+                      <Card className="p-6">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">📉 Historical Sales</h3>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">Actual performance trends</p>
+                        
+                        <div style={{ height: 280 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                              <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
+                              <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
+                              <Tooltip content={<CustomTooltip />} />
+                              {timeView === 'daily' || timeView === 'weekly' ? (
+                                <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual" radius={[3, 3, 0, 0]} />
+                              ) : (
+                                <>
+                                  <defs>
+                                    <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                                      <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                                    </linearGradient>
+                                  </defs>
+                                  <Area type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} fill="url(#colorActual)" name="Actual" />
+                                </>
+                              )}
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          {(() => {
+                            const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
+                            const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
+                            const avgSales = historicalData.length > 0 ? totalSales / historicalData.length : 0;
+                            const maxSales = historicalData.length > 0 ? Math.max(...historicalData.map(d => d.actual)) : 0;
+                            let growthRate = 0;
+                            if (historicalData.length >= 2) {
+                              const firstHalf = historicalData.slice(0, Math.floor(historicalData.length / 2));
+                              const secondHalf = historicalData.slice(Math.floor(historicalData.length / 2));
+                              const firstAvg = firstHalf.reduce((s, d) => s + d.actual, 0) / firstHalf.length;
+                              const secondAvg = secondHalf.reduce((s, d) => s + d.actual, 0) / secondHalf.length;
+                              growthRate = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg * 100) : 0;
+                            }
+                            
+                            return (
+                              <>
+                                <div className="p-2 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                                  <div className="text-xs font-medium text-green-800 dark:text-green-400">Total</div>
+                                  <div className="text-sm font-bold text-green-900 dark:text-green-300">{Math.round(totalSales).toLocaleString()}</div>
+                                </div>
+                                <div className="p-2 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                                  <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Average</div>
+                                  <div className="text-sm font-bold text-blue-900 dark:text-blue-300">{Math.round(avgSales).toLocaleString()}</div>
+                                </div>
+                                <div className="p-2 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                                  <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Peak</div>
+                                  <div className="text-sm font-bold text-purple-900 dark:text-purple-300">{Math.round(maxSales).toLocaleString()}</div>
+                                </div>
+                                <div className={`p-2 rounded-lg border ${growthRate >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-800'}`}>
+                                  <div className={`text-xs font-medium ${growthRate >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-orange-800 dark:text-orange-400'}`}>Growth</div>
+                                  <div className={`text-sm font-bold ${growthRate >= 0 ? 'text-emerald-900 dark:text-emerald-300' : 'text-orange-900 dark:text-orange-300'}`}>
+                                    {growthRate > 0 ? '+' : ''}{growthRate.toFixed(1)}%
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </Card>
+                    )}
+                  </div>
+                )}
+
+                {/* Row 3: Analytics Cards in 2x2 Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  {/* Category Analysis */}
+                  {categoryAnalysis && (
+                    <Card className="p-6">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📦 Product Analysis</h3>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">By Category</h4>
+                          <div className="space-y-2">
+                            {categoryAnalysis.categories?.slice(0, 4).map((cat, idx) => {
+                              const total = categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0);
+                              const percentage = ((cat.sales / total) * 100).toFixed(1);
+                              return (
+                                <div key={idx} className="space-y-1">
+                                  <div className="flex justify-between text-xs">
+                                    <span className="font-medium text-gray-700 dark:text-gray-300">{cat.category}</span>
+                                    <span className="font-semibold" style={{ color: theme.chart }}>{percentage}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                                    <div className="h-1.5 rounded-full transition-all duration-500" style={{ width: `${percentage}%`, backgroundColor: theme.chart }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">By Bottle Size</h4>
+                          <div className="space-y-2">
+                            {categoryAnalysis.bottle_sizes?.slice(0, 4).map((size, idx) => {
+                              const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
+                              const percentage = ((size.sales / total) * 100).toFixed(1);
+                              return (
+                                <div key={idx} className="space-y-1">
+                                  <div className="flex justify-between text-xs">
+                                    <span className="font-medium text-gray-700 dark:text-gray-300">{size.size}</span>
+                                    <span className="font-semibold text-blue-600 dark:text-blue-400">{percentage}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                                    <div className="h-1.5 rounded-full transition-all duration-500 bg-blue-500" style={{ width: `${percentage}%` }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Causal Factors */}
+                  {causalFactorAnalysis && causalFactorAnalysis.factors && causalFactorAnalysis.factors.length > 0 && (
+                    <Card className="p-6">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">🔍 Causal Factors</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {causalFactorAnalysis.factors.slice(0, 4).map((f, idx) => (
+                          <div key={idx} className={`p-3 rounded-lg border-2 ${f.impact >= 0 ? 'border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20' : 'border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20'}`}>
+                            <div className={`text-xs font-medium mb-1 truncate ${f.impact >= 0 ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>{f.factor}</div>
+                            <div className={`text-lg font-bold ${f.impact >= 0 ? 'text-green-900 dark:text-green-300' : 'text-red-900 dark:text-red-300'}`}>
+                              {f.impact > 0 ? '+' : ''}{f.impact.toFixed(1)}%
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Store Analytics */}
+                  {storeAnalytics && (
+                    <Card className="p-6">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📊 Top Stores</h3>
+                      <div className="space-y-2">
+                        {storeAnalytics.top_buyers?.slice(0, 5).map((store, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400">#{idx + 1}</span>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{store.name}</span>
+                            </div>
+                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{store.sales.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Full Reports */}
+                  {fullReports && (
+                    <Card className="p-6">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📈 Sales Reports</h3>
+                      
+                      {fullReports.monthly && fullReports.monthly.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Recent Months</h4>
+                          <div className="grid grid-cols-3 gap-2">
+                            {fullReports.monthly.slice(-3).map((m, idx) => (
+                              <div key={idx} className="p-2 rounded-lg border bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
+                                <div className="text-xs font-medium text-purple-800 dark:text-purple-400 truncate">{m.month}</div>
+                                <div className="text-sm font-bold text-purple-900 dark:text-purple-300">{m.total_sales.toLocaleString()}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {fullReports.yearly && fullReports.yearly.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Yearly Overview</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {fullReports.yearly.map((y, idx) => (
+                              <div key={idx} className="p-2 rounded-lg border-2 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800">
+                                <div className="text-xs font-medium text-amber-800 dark:text-amber-400">{y.year}</div>
+                                <div className="text-sm font-bold text-amber-900 dark:text-amber-300">{y.total_sales.toLocaleString()}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  )}
                 </div>
               </div>
-              {displayData.length > 0 ? (
-                <div style={{ height: getChartHeight() }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={displayData} margin={{ top: 10, right: 30, left: 10, bottom: timeView === 'daily' ? 80 : 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: timeView === 'daily' ? 10 : 11, fill: '#9CA3AF' }} angle={timeView === 'daily' ? -45 : timeView === 'weekly' ? -35 : 0} textAnchor={timeView === 'daily' || timeView === 'weekly' ? 'end' : 'middle'} height={timeView === 'daily' ? 80 : 60} interval={timeView === 'daily' && displayData.length > 30 ? Math.floor(displayData.length / 20) : 0} />
-                      <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
-                      {(timeView === 'daily' || timeView === 'weekly') ? (
-                        <>
-                          <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.3} name="Baseline (No Events)" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="predicted" fill={theme.chart} fillOpacity={0.7} name="Predicted with Events" radius={[4, 4, 0, 0]} />
-                          {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                            const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                            return <Bar key={eventName} dataKey={eventName} fill={color} fillOpacity={0.5} name={`Impact: ${eventName.split('_').slice(0, -1).join(' ')}`} radius={[4, 4, 0, 0]} />;
-                          })}
-                        </>
-                      ) : (
-                        <>
-                          <Area type="monotone" dataKey="upper" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Upper Bound" />
-                          <Area type="monotone" dataKey="lower" fill={theme.chart} fillOpacity={0.1} stroke="none" name="Lower Bound" />
-                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} dot={{ fill: '#10B981', r: 4 }} activeDot={{ r: 6 }} name="Actual Sales" connectNulls={false} />
-                          <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline (No Events)" connectNulls={true} />
-                          <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Predicted with Events" connectNulls={true} />
-                          {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                            const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                            return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={`Impact: ${eventName.split('_').slice(0, -1).join(' ')}`} connectNulls={true} />;
-                          })}
-                        </>
-                      )}
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-16 text-gray-500 dark:text-gray-400">
-                  <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p>Upload data to see forecast visualization</p>
-                </div>
-              )}
-              
-              {forecastPayload && displayData.length > 0 && (
-                <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-                    <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
-                    <div className="text-xl font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
-                    {causalEvents.length > 0 && <div className="text-xs text-green-700 dark:text-green-400 mt-2">With {causalEvents.length} event{causalEvents.length > 1 ? 's' : ''} impact</div>}
-                  </div>
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
-                    <div className="text-sm font-medium text-blue-800 dark:text-blue-400">Total Forecast Period</div>
-                    <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
-                    <div className="text-xs text-blue-700 dark:text-blue-400 mt-2">{forecastData.length} {timeView === 'daily' ? 'days' : timeView === 'weekly' ? 'weeks' : timeView === 'monthly' ? 'months' : timeView === 'quarterly' ? 'quarters' : 'years'}</div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
-                    <div className="text-sm font-medium text-purple-800 dark:text-purple-400">Active Events</div>
-                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">{causalEvents.length}</div>
-                    <div className="text-xs text-purple-700 dark:text-purple-400 mt-2">{causalEvents.filter(e => e.impact > 0).length} positive, {causalEvents.filter(e => e.impact < 0).length} negative</div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
-                    <div className="text-sm font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
-                    <div className="text-2xl font-bold text-orange-900 dark:text-orange-300 mt-1">
-                      {(() => {
-                        const totalPredicted = forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0);
-                        const totalBaseline = forecastData.reduce((sum, d) => sum + (d.baseline || 0), 0);
-                        const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
-                        return (impact > 0 ? '+' : '') + impact.toFixed(1);
-                      })()}%
-                    </div>
-                    <div className="text-xs text-orange-700 dark:text-orange-400 mt-2">vs baseline forecast</div>
-                  </div>
-                </div>
-              )}
-            </Card>
-
-            {displayData.length > 0 && forecastData.length > 0 && (
-            <Card className="p-6">
-       
-                  <h2 className="text-lg font-semiboldf text-gray-900 dark:text-white mb-4">2. Forecast with Event Impact Breakdown</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Detailed view of how each event affects the forecast</p>
-
-                {causalEvents.length === 0 ? (
-                  <>
-                    <div style={{ height: 420 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                          <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} interval={timeView === 'daily' && forecastData.length > 50 ? Math.floor(forecastData.length / 30) : 0} />
-                          <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
-                         {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
-                            <>
-                              <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
-                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} name="Baseline Forecast" />
-                            </>
-                          ) : (
-                            <>
-                              <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline Forecast" connectNulls={true} />
-                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Baseline Forecast" connectNulls={true} />
-                            </>
-                          )}
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="mt-6 text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
-                      <Gift className="w-12 h-12 mx-auto mb-3 opacity-50 text-gray-400" />
-                      <p className="font-medium text-gray-700 dark:text-gray-300">No causal events added yet</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Add events above to see their impact breakdown on the forecast</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ height: 320 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                          <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} interval={timeView === 'daily' && forecastData.length > 50 ? Math.floor(forecastData.length / 30) : 0} />
-                          <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
-                          {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
-                            <>
-                              <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
-                              {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                                const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                                return <Bar key={eventName} dataKey={eventName} stackId="events" fill={color} fillOpacity={0.8} name={eventName.split('_').slice(0, -1).join(' ')} radius={idx === scenarioGraph.eventNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />;
-                              })}
-                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} name="Total Predicted" />
-                            </>
-                          ) : (
-                            <>
-                              <Line type="monotone" dataKey="baseline" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Baseline Forecast" connectNulls={true} />
-                              {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                                const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                                return <Line key={eventName} type="monotone" dataKey={eventName} stroke={color} strokeWidth={2} strokeDasharray="3 3" dot={false} name={eventName.split('_').slice(0, -1).join(' ')} connectNulls={true} />;
-                              })}
-                              <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} activeDot={{ r: 6 }} name="Total Predicted" connectNulls={true} />
-                            </>
-                          )}
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {causalEvents.map((event) => {
-                        const eventKey = `${event.typeLabel}_${event.id}`;
-                        const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
-                        const Icon = event.icon;
-                        return (
-                          <div key={event.id} className="p-3 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
-                            <div className="flex items-center gap-2 mb-1">
-                              <Icon className="w-4 h-4" style={{ color: event.color }} />
-                              <span className="text-xs font-semibold text-gray-900 dark:text-white">{event.typeLabel}</span>
-                            </div>
-                            <div className="text-lg font-bold" style={{ color: event.color }}>
-                              {totalImpact > 0 ? '+' : ''}{Math.round(totalImpact).toLocaleString()}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">cumulative impact</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </Card>
-            )}
-            
-
-
-            {displayData.length > 0 && displayData.some(d => d.actual !== null) && (
-              <Card className="p-6">
- 
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">3. Historical Sales Analysis</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Actual sales performance and trends over time</p>
-
-                  <div style={{ height: 420 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} />
-                      <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                      {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
-                        <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
-                      ) : (
-                        <>
-                          <defs>
-                            <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
-                              <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
-                            </linearGradient>
-                          </defs>
-                          <Area type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={3} fill="url(#colorActual)" name="Actual Sales" />
-                          <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={0} dot={{ fill: '#10B981', r: 4 }} activeDot={{ r: 6 }} />
-                        </>
-                      )}
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-1 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {(() => {
-                    const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
-                    const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
-                    const avgSales = historicalData.length > 0 ? totalSales / historicalData.length : 0;
-                    const maxSales = historicalData.length > 0 ? Math.max(...historicalData.map(d => d.actual)) : 0;
-                    
-                    let growthRate = 0;
-                    if (historicalData.length >= 2) {
-                      const firstHalf = historicalData.slice(0, Math.floor(historicalData.length / 2));
-                      const secondHalf = historicalData.slice(Math.floor(historicalData.length / 2));
-                      const firstAvg = firstHalf.reduce((s, d) => s + d.actual, 0) / firstHalf.length;
-                      const secondAvg = secondHalf.reduce((s, d) => s + d.actual, 0) / secondHalf.length;
-                      growthRate = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg * 100) : 0;
-                    }
-                    
-                    return (
-                      <>
-                        <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-                          <div className="text-sm font-medium text-green-800 dark:text-green-400">Total Sales</div>
-                          <div className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{Math.round(totalSales).toLocaleString()}</div>
-                          <div className="text-xs text-green-700 dark:text-green-400 mt-2">{historicalData.length} periods</div>
-                        </div>
-                        <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
-                          <div className="text-sm font-medium text-blue-800 dark:text-blue-400">Average Sales</div>
-                          <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{Math.round(avgSales).toLocaleString()}</div>
-                          <div className="text-xs text-blue-700 dark:text-blue-400 mt-2">per {timeView === 'daily' ? 'day' : timeView === 'weekly' ? 'week' : timeView === 'monthly' ? 'month' : timeView === 'quarterly' ? 'quarter' : 'year'}</div>
-                        </div>
-                        <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
-                          <div className="text-sm font-medium text-purple-800 dark:text-purple-400">Peak Sales</div>
-                          <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">{Math.round(maxSales).toLocaleString()}</div>
-                          <div className="text-xs text-purple-700 dark:text-purple-400 mt-2">highest period</div>
-                        </div>
-                        <div className={`p-4 rounded-xl border ${growthRate >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-800'}`}>
-                          <div className={`text-sm font-medium ${growthRate >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-orange-800 dark:text-orange-400'}`}>Growth Rate</div>
-                          <div className={`text-2xl font-bold mt-1 ${growthRate >= 0 ? 'text-emerald-900 dark:text-emerald-300' : 'text-orange-900 dark:text-orange-300'}`}>
-                            {growthRate > 0 ? '+' : ''}{growthRate.toFixed(1)}%
-                          </div>
-                          <div className={`text-xs mt-2 ${growthRate >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-orange-700 dark:text-orange-400'}`}>period over period</div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </Card>
-              
-            )}
-            </div>
-
-
             {storeAnalytics && (
               <Card className="p-0 overflow-hidden">
                 <CollapsibleSection title="📊 Store-Level Analytics" defaultOpen={false}>

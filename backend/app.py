@@ -105,6 +105,27 @@ def process_wide_format(df):
         'PW350': 24, 'PW500': 24, 'PW1L': 12
     }
     
+    # Case pricing data (in Philippine Pesos)
+    CASE_PRICES = {
+        # Mountain Dew
+        'MD8': 380, 'MD12': 480, 'MD290': 380, 'MD750': 540, 'MD1L': 650,
+        'MD1.25': 720, 'MD1.5': 840, 'MD1.5/6': 420,
+        # Pepsi
+        'P8': 380, 'P290': 380, 'P750': 540, 'P1L': 650,
+        'P1.25': 720, 'P1.5': 840, 'P1.5/6': 420,
+        # 7Up
+        'S7': 350, 'SS8': 380, 'SS290': 380, 'SEV290': 380,
+        'S1.25': 720, 'S1.5': 840,
+        # Gatorade
+        'GBB350': 780, 'GBB500': 980, 'GTF350': 780, 'GR500': 980,
+        'GO500': 980, 'GB900': 780, 'GBB8': 480, 'GBB237': 550,
+        # Milkis
+        'MILKIS': 900, 'MILKIS500': 1200,
+        # Tropicana
+        'TRO8': 420,
+        # Premier Water
+        'PW350': 130, 'PW500': 150, 'PW1L': 170
+    }
     # Find date column
     date_col = None
     for col in df.columns:
@@ -136,28 +157,64 @@ def process_wide_format(df):
     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
     df = df.dropna(subset=[date_col])
     
-    # Convert cases to units and sum
-    print(f"Converting {len(sku_cols)} SKU columns from cases to units...")
+    # Convert cases to units and calculate revenue
+    print(f"Converting {len(sku_cols)} SKU columns from cases to units and revenue...")
+
+    # Initialize columns with proper numeric types
+    df['total_units'] = 0.0
+    df['total_revenue'] = 0.0
+
     for col in sku_cols:
         cases = parse_num_series(df[col])
         
-        # Find case quantity for this SKU
-        case_qty = CASE_QUANTITIES.get(col.strip(), 1)  # Default to 1 if SKU not found
+        # Get case quantity and price for this SKU
+        case_qty = CASE_QUANTITIES.get(col.strip(), 1)
+        case_price = CASE_PRICES.get(col.strip(), 0)
         
-        # Convert cases to units
-        df[col] = cases * case_qty
+        # Convert cases to units - ensure numeric
+        units = cases.fillna(0) * case_qty
+        df[f'{col}_units'] = units.astype(float)
+        
+        # Calculate revenue (cases × case price) - ensure numeric
+        revenue = cases.fillna(0) * case_price
+        df[f'{col}_revenue'] = revenue.astype(float)
+        
+        # Add to totals - use .add() to avoid type errors
+        df['total_units'] = df['total_units'].add(units, fill_value=0)
+        df['total_revenue'] = df['total_revenue'].add(revenue, fill_value=0)
         
         if cases.sum() > 0:
-            print(f"  ✓ {col}: {cases.sum():.0f} cases × {case_qty} = {df[col].sum():.0f} units")
+            print(f"  ✓ {col}: {cases.sum():.0f} cases × {case_qty} units = {units.sum():.0f} units | Revenue: ₱{revenue.sum():,.2f}")
+
+    # Ensure totals are numeric
+    df['total_units'] = pd.to_numeric(df['total_units'], errors='coerce').fillna(0)
+    df['total_revenue'] = pd.to_numeric(df['total_revenue'], errors='coerce').fillna(0)
+
+    print(f"\n{'='*60}")
+    print(f"CONVERSION SUMMARY")
+    print(f"{'='*60}")
+
+    # Calculate total cases processed safely
+    total_cases = 0
+    for col in sku_cols:
+        col_cases = parse_num_series(df[col]).sum()
+        total_cases += col_cases
+
+    print(f"Total Cases Processed: {total_cases:,.0f}")
+    print(f"Total Units: {df['total_units'].sum():,.0f}")
+    print(f"Total Revenue: ₱{df['total_revenue'].sum():,.2f}")
+    print(f"{'='*60}\n")
     
-    df['total'] = df[sku_cols].sum(axis=1)
-    
-    # Group by date
-    result = df.groupby(date_col)['total'].sum().reset_index()
-    result.columns = ['ds', 'y']
-    
+    # Group by date - now with both units and revenue
+    result = df.groupby(date_col).agg({
+        'total_units': 'sum',
+        'total_revenue': 'sum'
+    }).reset_index()
+    result.columns = ['ds', 'y', 'revenue']
+
     print(f"✓ Converted wide format: {len(result)} daily observations")
     print(f"✓ Total units (all SKUs combined): {result['y'].sum():,.0f}")
+    print(f"✓ Total revenue: ₱{result['revenue'].sum():,.2f}")
     return result
 
 
@@ -544,6 +601,28 @@ def forecast():
         print(f"✓ Total forecast demand: {sum(forecast_values):,.0f} units")
         print(f"{'='*60}\n")
 
+        # Calculate revenue metrics
+        if 'revenue' in prophet_df.columns:
+            # Ensure revenue column is numeric
+            prophet_df['revenue'] = pd.to_numeric(prophet_df['revenue'], errors='coerce').fillna(0)
+            
+            total_revenue = float(prophet_df['revenue'].sum())
+            avg_daily_revenue = float(prophet_df['revenue'].mean())
+            
+            # Project revenue for forecast period
+            forecast_revenue = []
+            if total_revenue > 0 and prophet_df['y'].sum() > 0:
+                avg_price_per_unit = total_revenue / prophet_df['y'].sum()
+                for _, row in future_forecast.iterrows():
+                    forecast_revenue.append(float(row['yhat']) * avg_price_per_unit)
+            else:
+                forecast_revenue = [0] * len(forecast_values)
+        else:
+            total_revenue = 0
+            avg_daily_revenue = 0
+            forecast_revenue = [0] * len(forecast_values)
+
+        # Update the return jsonify to include revenue data
         return jsonify({
             "model_used": "prophet_optimized",
             "forecast": forecast_list,
@@ -552,12 +631,20 @@ def forecast():
             "decisions": [],
             "feature_importance": None,
             "monthly_total": float(sum(forecast_values)),
+            "monthly_revenue": sum(forecast_revenue),  # NEW
             "forecast_days": forecast_days,
-            "metrics": final_metrics,
+            "metrics": {
+                **final_metrics,
+                "total_revenue": total_revenue,  # NEW
+                "avg_daily_revenue": avg_daily_revenue,  # NEW
+                "avg_price_per_unit": total_revenue / prophet_df['y'].sum() if prophet_df['y'].sum() > 0 else 0  # NEW
+            },
             "evaluation": evaluation_results,
             "insights": insights,
-            "model_params": model_params
+            "model_params": model_params,
+            "revenue_forecast": forecast_revenue  # NEW
         })
+
 
     except Exception as e:
         import traceback
@@ -1839,6 +1926,27 @@ def sales_query():
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 400
     
+@app.route("/sku-pricing", methods=["GET"])
+def sku_pricing():
+    """Return complete SKU information including prices"""
+    sku_data = []
+    for sku, qty in CASE_QUANTITIES.items():
+        sku_data.append({
+            "sku": sku,
+            "case_qty": qty,
+            "case_price": CASE_PRICES.get(sku, 0),
+            "price_per_unit": CASE_PRICES.get(sku, 0) / qty if qty > 0 else 0
+        })
     
+    return jsonify({
+        "sku_info": sku_data,
+        "total_skus": len(sku_data),
+        "price_range": {
+            "min_case_price": min(CASE_PRICES.values()),
+            "max_case_price": max(CASE_PRICES.values()),
+            "avg_case_price": sum(CASE_PRICES.values()) / len(CASE_PRICES)
+        }
+    })
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

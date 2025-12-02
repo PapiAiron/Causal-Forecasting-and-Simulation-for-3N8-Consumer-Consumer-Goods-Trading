@@ -1027,77 +1027,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         icon={TrendingUp}
         onBack={onBack} />
         <main className="max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-6">  
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,40%)_minmax(0,20%)_minmax(0,40%)] gap-6">
-            <Card className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Causal Events</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Plan and manage events that impact beverage sales</p>
-                </div>
-                <button 
-                  onClick={() => setShowEventModal(true)} 
-                  disabled={!file}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${!file ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} 
-                  style={{ backgroundColor: theme.chart }}
-                  title={!file ? 'Upload data first to add events' : 'Add a new causal event'}
-                >
-                  <Plus size={18} /><span>Add Event</span>
-                </button>
-              </div>
-              <div className="space-y-2">
-                {causalEvents.length === 0 ? (
-                  <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No causal events added yet. Click "Add Event" to start planning.</div>
-                ) : causalEvents.map(event => {
-                  const Icon = event.icon;
-                  return (
-                    <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 rounded-lg" style={{ backgroundColor: event.color + '20' }}>
-                          <Icon className="w-5 h-5" style={{ color: event.color }} />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">{event.typeLabel}</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {event.startDate} {event.endDate && `to ${event.endDate}`} • Impact: {event.impact > 0 ? '+' : ''}{event.impact}%
-                          </p>
-                          {event.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{event.description}</p>}
-                        </div>
-                      </div>
-                      <button onClick={() => handleRemoveEvent(event.id)} className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-                        <X className="w-4 h-4 text-red-600 dark:text-red-400" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
-                <div>
-                  <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
-                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
-
-                  {/* ADD THIS NEW SECTION */}
-                  {file && (
-                    <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Current file: {file.name}
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
-                    <Upload size={18} />
-                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
-                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
-                  </label>
-                </div>
-              </div>
-              {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
-              {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
-            </Card>
-
-            
+          <div className="grid grid-cols-1 lg:grid-cols-[40%_20%_40%] gap-6">
             {/* SALES QUERY CARD */}
               <Card className="p-6">
                 <div className="flex justify-between items-center mb-4">
@@ -1356,6 +1286,79 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 )}
               </Card>
 
+            
+            
+            <Card className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Causal Events</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Plan and manage events that impact beverage sales</p>
+                </div>
+                <button 
+                  onClick={() => setShowEventModal(true)} 
+                  disabled={!file}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${!file ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} 
+                  style={{ backgroundColor: theme.chart }}
+                  title={!file ? 'Upload data first to add events' : 'Add a new causal event'}
+                >
+                  <Plus size={18} /><span>Add Event</span>
+                </button>
+              </div>
+              <div className="space-y-2">
+                {causalEvents.length === 0 ? (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No causal events added yet. Click "Add Event" to start planning.</div>
+                ) : causalEvents.map(event => {
+                  const Icon = event.icon;
+                  return (
+                    <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-lg" style={{ backgroundColor: event.color + '20' }}>
+                          <Icon className="w-5 h-5" style={{ color: event.color }} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">{event.typeLabel}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {event.startDate} {event.endDate && `to ${event.endDate}`} • Impact: {event.impact > 0 ? '+' : ''}{event.impact}%
+                          </p>
+                          {event.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{event.description}</p>}
+                        </div>
+                      </div>
+                      <button onClick={() => handleRemoveEvent(event.id)} className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                        <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
+                <div>
+                  <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
+                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+
+                  {/* ADD THIS NEW SECTION */}
+                  {file && (
+                    <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Current file: {file.name}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
+                    <Upload size={18} />
+                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
+                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
+                  </label>
+                </div>
+              </div>
+              {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
+              {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
+            </Card>
+
+            
+            
 
             {showEventModal && (
               <>
@@ -1406,10 +1409,10 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             )}
 
             {/* MODERN GRID LAYOUT FOR CHARTS */}
-              <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="max-w-[100%] lg:col-span-3 grid grid-cols-1 lg:grid-cols-[85%_15%] gap-6">
                 
                 {/* Row 1: Main Overview Chart (Full Width) */}
-                <Card className="p-6 lg:col-span-2">
+                <Card className="p-6 ">
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                     <div>
                       <h2 className="text-xl font-bold text-gray-900 dark:text-white">📊 Sales Overview</h2>
@@ -1515,7 +1518,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 </Card>
 
               {storeAnalytics && (
-              <Card className="p-6 lg:col-span-1">
+              <Card className="p-6">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📊 Store-Level Analytics</h3>
                   <div className="space-y-6">
                     <div>
@@ -1560,7 +1563,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             
                 {/* Row 2: Two Charts Side by Side */}
                 {displayData.length > 0 && (
-                  <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-6">
                     
                     {/* Left: Event Impact Breakdown */}
                     <Card className="p-6">
@@ -1708,7 +1711,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 )}
 
                 {/* Row 4: Analytics Cards in 2x2 Grid */}
-                <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-[50%_50%] gap-6">
                   
                   {/* Category Analysis */}
                   {categoryAnalysis && (

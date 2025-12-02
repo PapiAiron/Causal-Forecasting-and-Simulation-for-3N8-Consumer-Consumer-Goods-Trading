@@ -1080,14 +1080,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                         <div className="text-xs text-purple-700 dark:text-purple-400 mt-2">Next {forecastPayload.forecast_days} days</div>
                       </div>
 
-                      {/* Avg Price Per Unit */}
-                      <div className="p-6 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-2 border-orange-200 dark:border-orange-700 rounded-xl">
-                        <div className="text-sm font-medium text-orange-800 dark:text-orange-400 mb-2">Avg Price/Unit</div>
-                        <div className="text-3xl font-bold text-orange-900 dark:text-orange-300">
-                          ₱{(forecastPayload.metrics.avg_price_per_unit || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                        <div className="text-xs text-orange-700 dark:text-orange-400 mt-2">Average selling price</div>
-                      </div>
+                  
                     </div>
 
                     {/* Revenue Breakdown */}

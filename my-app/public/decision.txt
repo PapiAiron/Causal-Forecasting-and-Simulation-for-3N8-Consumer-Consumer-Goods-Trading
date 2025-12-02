@@ -1,0 +1,44 @@
+
+const [activeInsightTab, setActiveInsightTab] = useState('overview');
+
+
+
+{decisionSupport && (
+  <Card className="p-6">
+    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+      <Zap className="w-6 h-6 inline mr-2" />
+      AI Insights & Reports
+    </h2>
+    
+    {/* Tab Navigation */}
+    <div className="flex gap-2 mb-6 overflow-x-auto">
+      {['overview', 'stores', 'products', 'factors'].map(tab => (
+        <button
+          key={tab}
+          onClick={() => setActiveInsightTab(tab)}
+          className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            activeInsightTab === tab
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+          }`}
+        >
+          {tab.charAt(0).toUpperCase() + tab.slice(1)}
+        </button>
+      ))}
+    </div>
+
+    {/* Tab Content */}
+    {activeInsightTab === 'overview' && decisionSupport && (
+      <div>{/* Decision Support content */}</div>
+    )}
+    {activeInsightTab === 'stores' && storeAnalytics && (
+      <div>{/* Store Analytics content */}</div>
+    )}
+    {activeInsightTab === 'products' && categoryAnalysis && (
+      <div>{/* Category Analysis content */}</div>
+    )}
+    {activeInsightTab === 'factors' && causalFactorAnalysis && (
+      <div>{/* Causal Factors content */}</div>
+    )}
+  </Card>
+)}

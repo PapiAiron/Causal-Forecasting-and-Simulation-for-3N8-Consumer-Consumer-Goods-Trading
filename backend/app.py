@@ -1075,8 +1075,8 @@ def full_report():
         prompt = f"""Analyze this beverage sales data and provide strategic insights:
 
 Sales Summary:
--dont include ** to the output
--Provide a summary output dont make it too long
+
+-Provide a SHORT/STRAIGHT TO THE POINT summary output 
 - Total Sales: {summary['total_sales']:,} units
 - Average Daily Sales: {summary['average_daily_sales']:,} units
 - Peak Sales Day: {summary['peak_sales']:,} units
@@ -1086,14 +1086,15 @@ Monthly Averages:
 {json.dumps(summary['monthly_averages'], indent=2)}
 
 Provide a comprehensive report with:
-1. **Sales Performance Analysis**: Key trends and patterns
-2. **Seasonal Insights**: Best and worst performing months
-3. **Store Expansion Recommendations**: Which stores to prioritize based on sales
-4. **Inventory Stocking Strategy**: Optimal stock levels for different periods
-5. **Risk Assessment**: Potential stockout periods
-6. **Action Items**: Top 3 immediate actions to improve sales
+1. Sales Performance Analysis: Key trends and patterns
+2. Seasonal Insights: Best and worst performing months
+3. Store Expansion Recommendations: Which stores to prioritize based on sales
+4. Inventory Stocking Strategy: Optimal stock levels for different periods
+5. Risk Assessment: Potential stockout periods
+6. Action Items: Top 3 immediate actions to improve sales
 
-Format the response in clear sections with bullet points."""
+Format the response in clear sections with bullet points.
+-MAKE IT SHORT/STRAIGHT TO THE POINT summary output """
 
         # Correct Gemini API format
         headers = {"Content-Type": "application/json"}

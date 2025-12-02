@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { TrendingUp, Upload, Plus, X, Sun, Cloud, CloudRain, Zap, Users, Gift, AlertTriangle, ChevronDown  } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, Upload, Plus, X, Sun, Cloud, CloudRain, Zap, Users, Gift, AlertTriangle, ChevronDown } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -15,6 +15,9 @@ import {
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
 import { LayoutWrapper } from './DashboardHome';
+import { auth, db } from '../firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
   const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -56,6 +59,110 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [categoryAnalysis, setCategoryAnalysis] = useState(null);
   const [storeDemandCauses, setStoreDemandCauses] = useState(null);
   const [activeInsightTab, setActiveInsightTab] = useState('overview');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoadingFromFirebase, setIsLoadingFromFirebase] = useState(true);
+
+  // Monitor authentication state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        await loadUserData(user.uid);
+      }
+      setIsLoadingFromFirebase(false);
+    });
+    
+    return () => unsubscribe();
+  }, []);
+
+  // Save ONLY analysis data to Firestore (NOT the file)
+  const saveToFirestore = async (userId, fileName) => {
+    try {
+      const userDocRef = doc(db, 'userFiles', userId);
+      await setDoc(userDocRef, {
+        fileName: fileName,
+        uploadedAt: new Date().toISOString(),
+        analysisData: {
+          scenarioGraph: scenarioGraph,
+          forecastPayload: forecastPayload,
+          decisions: decisions,
+          featureImportance: featureImportance,
+          causalEvents: causalEvents,
+          storeAnalytics: storeAnalytics,
+          causalFactorAnalysis: causalFactorAnalysis,
+          fullReports: fullReports,
+          decisionSupport: decisionSupport,
+          categoryAnalysis: categoryAnalysis,
+          storeDemandCauses: storeDemandCauses
+        }
+      }, { merge: true });
+      console.log('✓ Data saved to Firestore');
+    } catch (error) {
+      console.error('Error saving to Firestore:', error);
+      setError('Failed to save data to cloud storage');
+    }
+  };
+
+  // Load user data from Firestore
+  const loadUserData = async (userId) => {
+    try {
+      const userDocRef = doc(db, 'userFiles', userId);
+      const docSnap = await getDoc(userDocRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        console.log('✓ Loading saved data from Firestore');
+        
+        // Restore all analysis data
+        if (data.analysisData) {
+          const analysis = data.analysisData;
+          if (analysis.scenarioGraph) setScenarioGraph(analysis.scenarioGraph);
+          if (analysis.forecastPayload) setForecastPayload(analysis.forecastPayload);
+          if (analysis.decisions) setDecisions(analysis.decisions);
+          if (analysis.featureImportance) setFeatureImportance(analysis.featureImportance);
+          if (analysis.causalEvents) setCausalEvents(analysis.causalEvents);
+          if (analysis.storeAnalytics) setStoreAnalytics(analysis.storeAnalytics);
+          if (analysis.causalFactorAnalysis) setCausalFactorAnalysis(analysis.causalFactorAnalysis);
+          if (analysis.fullReports) setFullReports(analysis.fullReports);
+          if (analysis.decisionSupport) setDecisionSupport(analysis.decisionSupport);
+          if (analysis.categoryAnalysis) setCategoryAnalysis(analysis.categoryAnalysis);
+          if (analysis.storeDemandCauses) setStoreDemandCauses(analysis.storeDemandCauses);
+        }
+        
+        // Restore file metadata
+        if (data.fileName) {
+          // Create a pseudo-file object for display purposes
+          const pseudoFile = new File([''], data.fileName, { type: 'text/csv' });
+          setFile(pseudoFile);
+        }
+        
+        setUploadStatus('Previous data loaded successfully');
+        setTimeout(() => setUploadStatus(''), 3000);
+      } else {
+        console.log('No saved data found for this user');
+      }
+    } catch (error) {
+      console.error('Error loading from Firestore:', error);
+    }
+  };
+
+
+  // Save current state to Firestore with explicit values
+  const saveCurrentStateToFirestore = async (userId, fileName, currentState) => {
+    try {
+      const userDocRef = doc(db, 'userFiles', userId);
+      await setDoc(userDocRef, {
+        fileName: fileName,
+        uploadedAt: new Date().toISOString(),
+        analysisData: currentState
+      }, { merge: true });
+      console.log('✓ Data saved to Firestore');
+    } catch (error) {
+      console.error('Error saving to Firestore:', error);
+      setError('Failed to save data to cloud storage');
+    }
+  };
+
   const fetchDecisionSupport = async (uploadedFile) => {
     setLoadingDecisions(true);
     try {
@@ -116,6 +223,52 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
   };
 
+  const rerunAIAnalysis = async () => {
+    if (!file || !currentUser) {
+      setError('Please upload a file first');
+      return;
+    }
+
+    setIsLoading(true);
+    setUploadStatus('Regenerating AI insights...');
+    setError('');
+
+    try {
+      // Fetch all AI analyses in parallel
+      const results = await Promise.all([
+        fetchDecisionSupport(file),
+        fetchCategoryAnalysis(file),
+        fetchStoreDemandCauses(file)
+      ]);
+
+      // Give state time to update
+      setTimeout(async () => {
+        // Now save with the updated states
+        await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+          scenarioGraph: scenarioGraph,
+          forecastPayload: forecastPayload,
+          decisions: decisions,
+          featureImportance: featureImportance,
+          causalEvents: causalEvents,
+          storeAnalytics: storeAnalytics,
+          causalFactorAnalysis: causalFactorAnalysis,
+          fullReports: fullReports,
+          decisionSupport: decisionSupport, // Will be updated from fetchDecisionSupport
+          categoryAnalysis: categoryAnalysis, // Will be updated from fetchCategoryAnalysis
+          storeDemandCauses: storeDemandCauses // Will be updated from fetchStoreDemandCauses
+        });
+        
+        setUploadStatus('AI insights regenerated successfully!');
+        setTimeout(() => setUploadStatus(''), 3000);
+      }, 2000);
+
+    } catch (err) {
+      console.error('Error regenerating AI insights:', err);
+      setError('Failed to regenerate AI insights');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   
   const [newEvent, setNewEvent] = useState({
@@ -276,13 +429,41 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
           if (!['ds', 'actual', 'baseline', 'predicted', 'upper', 'lower', 'totalImpact'].includes(key)) allEventKeys.add(key);
         }));
 
-        setScenarioGraph({ rows: validRows, seriesNames: ['actual', 'baseline', 'predicted', 'upper', 'lower'], eventNames: Array.from(allEventKeys) });
-      }
+        const newScenarioGraph = { 
+            rows: validRows, 
+            seriesNames: ['actual', 'baseline', 'predicted', 'upper', 'lower'], 
+            eventNames: Array.from(allEventKeys) 
+          };
+          setScenarioGraph(newScenarioGraph);
 
-      setForecastPayload(forecastData);
-      setDecisions(forecastData.decisions || []);
-      setUploadStatus('Analysis complete!');
-      
+          const newDecisions = forecastData.decisions || [];
+          setForecastPayload(forecastData);
+          setDecisions(newDecisions);
+          setUploadStatus('Analysis complete!');
+          
+          // Save to Firestore with the NEW values we just created
+          if (currentUser && file) {
+            setTimeout(async () => {
+              try {
+                await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+                  scenarioGraph: newScenarioGraph,
+                  forecastPayload: forecastData,
+                  decisions: newDecisions,
+                  featureImportance,
+                  causalEvents,
+                  storeAnalytics,
+                  causalFactorAnalysis,
+                  fullReports,
+                  decisionSupport,
+                  categoryAnalysis,
+                  storeDemandCauses
+                });
+              } catch (err) {
+                console.error('Error saving analysis to Firestore:', err);
+              }
+            }, 500);
+          }
+        }
     } catch (err) {
       console.error(err);
       setError(String(err.message || err));
@@ -292,10 +473,16 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
   };
 
-    // Modify the handleFileUploadAndAnalyze function to include these new fetches
+
   const handleFileUploadAndAnalyze = async (e) => {
     const f = e?.target?.files?.[0];
     if (!f) return;
+    
+    if (!currentUser) {
+      setError('Please log in to upload files');
+      return;
+    }
+    
     setFile(f);
 
     // Run causal forecast
@@ -306,25 +493,45 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
     // Fetch all reports in parallel
     try {
-      await Promise.all([
-        // Existing fetches
+      const results = await Promise.all([
         fetch('http://127.0.0.1:5000/store-analytics', { method: 'POST', body: forecastForm })
-          .then(res => res.ok ? res.json() : null)
-          .then(data => data && setStoreAnalytics(data)),
+          .then(res => res.ok ? res.json() : null),
         
         fetch('http://127.0.0.1:5000/causal-factors-report', { method: 'POST', body: forecastForm })
-          .then(res => res.ok ? res.json() : null)
-          .then(data => data && setCausalFactorAnalysis(data)),
+          .then(res => res.ok ? res.json() : null),
         
         fetch('http://127.0.0.1:5000/full-reports', { method: 'POST', body: forecastForm })
-          .then(res => res.ok ? res.json() : null)
-          .then(data => data && setFullReports(data)),
+          .then(res => res.ok ? res.json() : null),
         
-        // New fetches
-        fetchDecisionSupport(f),
-        fetchCategoryAnalysis(f),
-        fetchStoreDemandCauses(f)
+        fetchDecisionSupport(f).then(() => decisionSupport),
+        fetchCategoryAnalysis(f).then(() => categoryAnalysis),
+        fetchStoreDemandCauses(f).then(() => storeDemandCauses)
       ]);
+      
+      // Set all the states
+      if (results[0]) setStoreAnalytics(results[0]);
+      if (results[1]) setCausalFactorAnalysis(results[1]);
+      if (results[2]) setFullReports(results[2]);
+      
+      // Wait a bit for all states to update
+      // Save with the results we just fetched
+      setTimeout(async () => {
+        if (currentUser) {
+          await saveCurrentStateToFirestore(currentUser.uid, f.name, {
+            scenarioGraph: scenarioGraph, // This will be set from runForecastWithEvents
+            forecastPayload: forecastPayload,
+            decisions: decisions,
+            featureImportance: featureImportance,
+            causalEvents: causalEvents,
+            storeAnalytics: results[0],
+            causalFactorAnalysis: results[1],
+            fullReports: results[2],
+            decisionSupport: decisionSupport,
+            categoryAnalysis: categoryAnalysis,
+            storeDemandCauses: storeDemandCauses
+          });
+        }
+      }, 2000); // Increased delay to ensure all states are updated
     } catch (err) {
       console.error("Error fetching reports:", err);
       setError(String(err));
@@ -358,13 +565,58 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     setCausalEvents(updatedEvents);
     setShowEventModal(false);
     setNewEvent({ type: 'weather_hot', startDate: '', endDate: '', impact: eventTypes[0].impact, description: '' });
-    if (file) await runForecastWithEvents(file, updatedEvents);
+    
+    if (file) {
+      await runForecastWithEvents(file, updatedEvents);
+
+      // Save to Firestore with updated events - use longer delay
+      setTimeout(async () => {
+        if (currentUser) {
+          await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+            scenarioGraph: scenarioGraph, // Will be updated by runForecastWithEvents
+            forecastPayload: forecastPayload,
+            decisions: decisions,
+            featureImportance: featureImportance,
+            causalEvents: updatedEvents,
+            storeAnalytics: storeAnalytics,
+            causalFactorAnalysis: causalFactorAnalysis,
+            fullReports: fullReports,
+            decisionSupport: decisionSupport,
+            categoryAnalysis: categoryAnalysis,
+            storeDemandCauses: storeDemandCauses
+          });
+        }
+      }, 1500);
+    }
+    
   };
 
   const handleRemoveEvent = async (id) => {
     const updatedEvents = causalEvents.filter(e => e.id !== id);
     setCausalEvents(updatedEvents);
-    if (file) await runForecastWithEvents(file, updatedEvents);
+    
+    if (file) {
+  await runForecastWithEvents(file, updatedEvents);
+  
+  // Save to Firestore with updated events
+  setTimeout(async () => {
+    if (currentUser) {
+      await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+        scenarioGraph,
+        forecastPayload,
+        decisions,
+        featureImportance,
+        causalEvents: updatedEvents,
+        storeAnalytics,
+        causalFactorAnalysis,
+        fullReports,
+        decisionSupport,
+        categoryAnalysis,
+        storeDemandCauses
+      });
+    }
+  }, 500);
+}
   };
 
   const aggregateData = (data, view) => {
@@ -454,6 +706,19 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   causalEvents.forEach(event => { eventColors[`${event.typeLabel}_${event.id}`] = event.color; });
   const getChartHeight = () => ({ daily: 350, weekly: 320, monthly: 300, quarterly: 280 }[timeView] || 280);
 
+  if (isLoadingFromFirebase) {
+    return (
+      <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading your saved data...</p>
+          </div>
+        </div>
+      </LayoutWrapper>
+    );
+  }
+
   return (
     <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
       <div className="pt-24">
@@ -461,20 +726,27 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         description="Factor Impact, Event Planning & Advanced Forecasting for Beverage Sales" 
         icon={TrendingUp}
         onBack={onBack} />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main className="max-w-[85%] mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="space-y-6">
             
             <Card className="p-6">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+                  {file && (
+                    <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Current file: {file.name}
+                    </p>
+                  )}
                 </div>
-                <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
-                  <Upload size={18} />
-                  <span>{isLoading ? 'Processing...' : 'Upload'}</span>
-                  <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
-                </label>
+                <div className="flex gap-2">
+                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
+                    <Upload size={18} />
+                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
+                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
+                  </label>
+                </div>
               </div>
               {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
               {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
@@ -572,12 +844,12 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 ">
               {/* Chart 1: Combined Overview - Takes full width when alone, half when with others */}
               <Card className="p-6 lg:col-span-2">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Sales Overview</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-center">Sales Overview</h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 ">Historical data and forecast with events</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -597,7 +869,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
-                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                      {(timeView === 'daily' || timeView === 'weekly') ? (
                         <>
                           <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.3} name="Baseline (No Events)" radius={[4, 4, 0, 0]} />
@@ -664,14 +936,14 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             </Card>
 
             {displayData.length > 0 && forecastData.length > 0 && (
-              <Card className="p-6">
+            <Card className="p-6">
        
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">2. Forecast with Event Impact Breakdown</h2>
+                  <h2 className="text-lg font-semiboldf text-gray-900 dark:text-white mb-4">2. Forecast with Event Impact Breakdown</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Detailed view of how each event affects the forecast</p>
 
                 {causalEvents.length === 0 ? (
                   <>
-                    <div style={{ height: 320 }}>
+                    <div style={{ height: 420 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -679,7 +951,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                           <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                           <Tooltip content={<CustomTooltip />} />
                           <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
-                          {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                         {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                             <>
                               <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
                               <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} name="Baseline Forecast" />
@@ -709,7 +981,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                           <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                           <Tooltip content={<CustomTooltip />} />
                           <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
-                          {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                          {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                             <>
                               <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
                               {scenarioGraph?.eventNames?.map((eventName, idx) => {
@@ -754,6 +1026,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 )}
               </Card>
             )}
+            
+
 
             {displayData.length > 0 && displayData.some(d => d.actual !== null) && (
               <Card className="p-6">
@@ -761,15 +1035,15 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">3. Historical Sales Analysis</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Actual sales performance and trends over time</p>
 
-                <div style={{ height: 420 }}>
-                  <ResponsiveContainer width="100%" height="100%">
+                  <div style={{ height: 420 }}>
+                    <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                       <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} />
                       <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                      {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                         <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
                       ) : (
                         <>
@@ -786,7 +1060,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="mt-1 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {(() => {
                     const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
                     const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
@@ -950,6 +1224,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
 
           </div>
+
+
           {/* Decision Support System - AI-Powered Insights */}
             {decisionSupport && (
               <Card className="p-6">
@@ -961,23 +1237,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       Strategic insights and recommendations powered by {decisionSupport.generated_by}
                     </p>
               
-                  <button
-                    onClick={() => fetchDecisionSupport(file)}
-                    disabled={loadingDecisions || !file}
-                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-medium transition-all disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {loadingDecisions ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Zap size={16} />
-                        Refresh Insights
-                      </>
-                    )}
-                  </button>
+                 
                 
 
                 {/* Key Metrics Dashboard */}

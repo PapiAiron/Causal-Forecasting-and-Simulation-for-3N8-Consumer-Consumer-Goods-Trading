@@ -45,6 +45,9 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
     { id: 'home', label: 'Home', icon: Home, roles: ['admin', 'staff', 'user'] },
     { id: 'causal-analysis', label: 'Causal Analysis', icon: TrendingUp, roles: ['admin', 'staff', 'user'] },
     { id: 'simulation', label: 'Simulation', icon: Play, roles: ['admin', 'staff', 'user'] },
+    { id: 'delivery-tracking', label: 'Delivery Tracking', icon: Truck, roles: ['admin', 'staff', 'user'] },
+    { id: 'store-analytics', label: 'Store Analytics', icon: BarChart3, roles: ['admin', 'staff', 'user'] },
+    { id: 'reporting', label: 'Reporting', icon: Calendar, roles: ['admin', 'staff', 'user'] },
     { id: 'settings', label: 'Settings', icon: Settings, roles: ['admin', 'staff', 'user'] },
     { id: 'manage-accounts', label: 'Manage Accounts', icon: UserPlus, roles: ['admin'] }, // ONLY ADMIN
   ];
@@ -448,6 +451,21 @@ const DashboardContent = ({ onNavigate }) => {
 
   // UPDATED: Dashboard cards (Overview removed, Settings added)
   const dashboardCards = [
+    
+    {
+      id: 'causal-analysis',
+      title: 'Causal Analysis',
+      description: 'Factor Impact & Correlation Analysis',
+      icon: TrendingUp,
+      stats: { factors: '6', correlation: '85%' }
+    },
+    {
+      id: 'simulation',
+      title: 'Simulation',
+      description: 'Scenario Analysis & Risk Assessment',
+      icon: Play,
+      stats: { scenarios: '4', lastRun: '2 hrs ago' }
+    },
         {
       id: 'delivery-tracking',
       title: 'Delivery Tracking',
@@ -468,27 +486,6 @@ const DashboardContent = ({ onNavigate }) => {
       description: 'Monthly, weekly, and yearly sales + bottle category reports.',
       icon: Calendar,
       stats: { reports: '23',  Updated: 'Today' }
-    },
-    {
-      id: 'causal-analysis',
-      title: 'Causal Analysis',
-      description: 'Factor Impact & Correlation Analysis',
-      icon: TrendingUp,
-      stats: { factors: '6', correlation: '85%' }
-    },
-    {
-      id: 'simulation',
-      title: 'Simulation',
-      description: 'Scenario Analysis & Risk Assessment',
-      icon: Play,
-      stats: { scenarios: '4', lastRun: '2 hrs ago' }
-    },
-    {
-      id: 'settings',
-      title: 'Settings',
-      description: 'Customize Theme & Preferences',
-      icon: Settings,
-      stats: { theme: 'Ocean Blue', mode: 'Dark' }
     }
   ];
 
@@ -596,35 +593,7 @@ const DashboardContent = ({ onNavigate }) => {
         })}
       </div>
 
-      {/* QUICK GLANCE SECTION */}
-      <Card className="p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Quick Glance Overview
-        </h3>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
-            <p className="text-sm text-gray-500">Inventory Level</p>
-            <p className="text-2xl font-bold">83%</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
-            <p className="text-sm text-gray-500">Top Stores</p>
-            <p className="text-2xl font-bold">12</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
-            <p className="text-sm text-gray-500">Deliveries Made</p>
-            <p className="text-2xl font-bold">47</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 shadow">
-            <p className="text-sm text-gray-500">Out for Delivery</p>
-            <p className="text-2xl font-bold">6</p>
-          </div>
-        </div>
-      </Card>
-
+      
       {/* RECENT ACTIVITY */}
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">

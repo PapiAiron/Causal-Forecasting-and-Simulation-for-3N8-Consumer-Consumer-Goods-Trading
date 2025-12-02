@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { TrendingUp, Upload, Plus, X, Sun, Cloud, CloudRain, Zap, Users, Gift, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, Upload, Plus, X, Sun, Cloud, CloudRain, Zap, Users, Gift, AlertTriangle, ChevronDown } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -15,7 +15,28 @@ import {
 import { useTheme } from "../components/ThemeContext";
 import { Card, Header } from '../components/SharedComponents';
 import { LayoutWrapper } from './DashboardHome';
+import { auth, db } from '../firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
+  const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    
+    return (
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        >
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <ChevronDown 
+            className={`w-5 h-5 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {isOpen && <div className="p-4 pt-0">{children}</div>}
+      </div>
+    );
+  };
 const CausalAnalysis = ({ onNavigate, onBack }) => {
   const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
@@ -26,9 +47,230 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [scenarioGraph, setScenarioGraph] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [featureImportance, setFeatureImportance] = useState([]);
-  const [timeView, setTimeView] = useState('daily');
+  const [timeView, setTimeView] = useState('monthly');
   const [causalEvents, setCausalEvents] = useState([]);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [storeAnalytics, setStoreAnalytics] = useState(null);
+  const [reports, setReports] = useState(null);
+  const [causalFactorAnalysis, setCausalFactorAnalysis] = useState(null); // external factors, promo impact
+  const [fullReports, setFullReports] = useState(null); // monthly/weekly/yearly reports, bottle size, categories
+  const [decisionSupport, setDecisionSupport] = useState(null);
+  const [loadingDecisions, setLoadingDecisions] = useState(false);
+  const [categoryAnalysis, setCategoryAnalysis] = useState(null);
+  const [storeDemandCauses, setStoreDemandCauses] = useState(null);
+  const [activeInsightTab, setActiveInsightTab] = useState('overview');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoadingFromFirebase, setIsLoadingFromFirebase] = useState(true);
+
+  // Monitor authentication state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        await loadUserData(user.uid);
+      }
+      setIsLoadingFromFirebase(false);
+    });
+    
+    return () => unsubscribe();
+  }, []);
+
+  // Save ONLY analysis data to Firestore (NOT the file)
+  const saveToFirestore = async (userId, fileName) => {
+    try {
+      const userDocRef = doc(db, 'userFiles', userId);
+      await setDoc(userDocRef, {
+        fileName: fileName,
+        uploadedAt: new Date().toISOString(),
+        analysisData: {
+          scenarioGraph: scenarioGraph,
+          forecastPayload: forecastPayload,
+          decisions: decisions,
+          featureImportance: featureImportance,
+          causalEvents: causalEvents,
+          storeAnalytics: storeAnalytics,
+          causalFactorAnalysis: causalFactorAnalysis,
+          fullReports: fullReports,
+          decisionSupport: decisionSupport,
+          categoryAnalysis: categoryAnalysis,
+          storeDemandCauses: storeDemandCauses
+        }
+      }, { merge: true });
+      console.log('✓ Data saved to Firestore');
+    } catch (error) {
+      console.error('Error saving to Firestore:', error);
+      setError('Failed to save data to cloud storage');
+    }
+  };
+
+  // Load user data from Firestore
+  const loadUserData = async (userId) => {
+    try {
+      const userDocRef = doc(db, 'userFiles', userId);
+      const docSnap = await getDoc(userDocRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        console.log('✓ Loading saved data from Firestore');
+        
+        // Restore all analysis data
+        if (data.analysisData) {
+          const analysis = data.analysisData;
+          if (analysis.scenarioGraph) setScenarioGraph(analysis.scenarioGraph);
+          if (analysis.forecastPayload) setForecastPayload(analysis.forecastPayload);
+          if (analysis.decisions) setDecisions(analysis.decisions);
+          if (analysis.featureImportance) setFeatureImportance(analysis.featureImportance);
+          if (analysis.causalEvents) setCausalEvents(analysis.causalEvents);
+          if (analysis.storeAnalytics) setStoreAnalytics(analysis.storeAnalytics);
+          if (analysis.causalFactorAnalysis) setCausalFactorAnalysis(analysis.causalFactorAnalysis);
+          if (analysis.fullReports) setFullReports(analysis.fullReports);
+          if (analysis.decisionSupport) setDecisionSupport(analysis.decisionSupport);
+          if (analysis.categoryAnalysis) setCategoryAnalysis(analysis.categoryAnalysis);
+          if (analysis.storeDemandCauses) setStoreDemandCauses(analysis.storeDemandCauses);
+        }
+        
+        // Restore file metadata
+        if (data.fileName) {
+          // Create a pseudo-file object for display purposes
+          const pseudoFile = new File([''], data.fileName, { type: 'text/csv' });
+          setFile(pseudoFile);
+        }
+        
+        setUploadStatus('Previous data loaded successfully');
+        setTimeout(() => setUploadStatus(''), 3000);
+      } else {
+        console.log('No saved data found for this user');
+      }
+    } catch (error) {
+      console.error('Error loading from Firestore:', error);
+    }
+  };
+
+
+  // Save current state to Firestore with explicit values
+  const saveCurrentStateToFirestore = async (userId, fileName, currentState) => {
+    try {
+      const userDocRef = doc(db, 'userFiles', userId);
+      await setDoc(userDocRef, {
+        fileName: fileName,
+        uploadedAt: new Date().toISOString(),
+        analysisData: currentState
+      }, { merge: true });
+      console.log('✓ Data saved to Firestore');
+    } catch (error) {
+      console.error('Error saving to Firestore:', error);
+      setError('Failed to save data to cloud storage');
+    }
+  };
+
+  const fetchDecisionSupport = async (uploadedFile) => {
+    setLoadingDecisions(true);
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/decision-support', {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (!res.ok) throw new Error(await res.text() || 'Decision support failed');
+      const data = await res.json();
+      setDecisionSupport(data);
+    } catch (err) {
+      console.error('Decision support error:', err);
+      setError(String(err.message || err));
+    } finally {
+      setLoadingDecisions(false);
+    }
+  };
+
+  const fetchCategoryAnalysis = async (uploadedFile) => {
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/category-analysis', {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setCategoryAnalysis(data);
+      }
+    } catch (err) {
+      console.error('Category analysis error:', err);
+    }
+  };
+
+  const fetchStoreDemandCauses = async (uploadedFile) => {
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/store-demand-causes', {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setStoreDemandCauses(data);
+      }
+    } catch (err) {
+      console.error('Store demand causes error:', err);
+    }
+  };
+
+  const rerunAIAnalysis = async () => {
+    if (!file || !currentUser) {
+      setError('Please upload a file first');
+      return;
+    }
+
+    setIsLoading(true);
+    setUploadStatus('Regenerating AI insights...');
+    setError('');
+
+    try {
+      // Fetch all AI analyses in parallel
+      const results = await Promise.all([
+        fetchDecisionSupport(file),
+        fetchCategoryAnalysis(file),
+        fetchStoreDemandCauses(file)
+      ]);
+
+      // Give state time to update
+      setTimeout(async () => {
+        // Now save with the updated states
+        await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+          scenarioGraph: scenarioGraph,
+          forecastPayload: forecastPayload,
+          decisions: decisions,
+          featureImportance: featureImportance,
+          causalEvents: causalEvents,
+          storeAnalytics: storeAnalytics,
+          causalFactorAnalysis: causalFactorAnalysis,
+          fullReports: fullReports,
+          decisionSupport: decisionSupport, // Will be updated from fetchDecisionSupport
+          categoryAnalysis: categoryAnalysis, // Will be updated from fetchCategoryAnalysis
+          storeDemandCauses: storeDemandCauses // Will be updated from fetchStoreDemandCauses
+        });
+        
+        setUploadStatus('AI insights regenerated successfully!');
+        setTimeout(() => setUploadStatus(''), 3000);
+      }, 2000);
+
+    } catch (err) {
+      console.error('Error regenerating AI insights:', err);
+      setError('Failed to regenerate AI insights');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  
   const [newEvent, setNewEvent] = useState({
     type: 'weather_hot',
     startDate: '',
@@ -59,6 +301,60 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     { value: 'event', label: 'Major Event', icon: Users, color: '#8B5CF6', impact: 35 },
     { value: 'other', label: 'Other Causal Factors', icon: AlertTriangle, color: '#F59E0B', impact: 0 }
   ];
+
+
+
+  const fetchStoreAnalytics = async (uploadedFile) => {
+    setIsLoading(true);
+    setUploadStatus('Fetching store-level analytics...');
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      
+      const res = await fetch('http://127.0.0.1:5000/store-analytics', {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error(await res.text() || 'Store analytics failed');
+      const data = await res.json();
+      return data; // data should include top buyers, demand patterns, etc.
+    } catch (err) {
+      console.error(err);
+      setError(String(err.message || err));
+      return null;
+    } finally {
+      setIsLoading(false);
+      setUploadStatus('');
+    }
+  };
+
+  const fetchReports = async (uploadedFile, period = 'monthly') => {
+    setIsLoading(true);
+    setUploadStatus(`Generating ${period} reports...`);
+    try {
+      const form = new FormData();
+      form.append('file', uploadedFile);
+      form.append('period', period);
+
+      const res = await fetch('http://127.0.0.1:5000/reporting', {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error(await res.text() || 'Reporting failed');
+      const data = await res.json();
+      return data; // data should include category/bottle size breakdown, trends, etc.
+    } catch (err) {
+      console.error(err);
+      setError(String(err.message || err));
+      return null;
+    } finally {
+      setIsLoading(false);
+      setUploadStatus('');
+    }
+  };
+
+  
+
 
   const runForecastWithEvents = async (uploadedFile, events) => {
     setIsLoading(true);
@@ -133,13 +429,41 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
           if (!['ds', 'actual', 'baseline', 'predicted', 'upper', 'lower', 'totalImpact'].includes(key)) allEventKeys.add(key);
         }));
 
-        setScenarioGraph({ rows: validRows, seriesNames: ['actual', 'baseline', 'predicted', 'upper', 'lower'], eventNames: Array.from(allEventKeys) });
-      }
+        const newScenarioGraph = { 
+            rows: validRows, 
+            seriesNames: ['actual', 'baseline', 'predicted', 'upper', 'lower'], 
+            eventNames: Array.from(allEventKeys) 
+          };
+          setScenarioGraph(newScenarioGraph);
 
-      setForecastPayload(forecastData);
-      setDecisions(forecastData.decisions || []);
-      setUploadStatus('Analysis complete!');
-      
+          const newDecisions = forecastData.decisions || [];
+          setForecastPayload(forecastData);
+          setDecisions(newDecisions);
+          setUploadStatus('Analysis complete!');
+          
+          // Save to Firestore with the NEW values we just created
+          if (currentUser && file) {
+            setTimeout(async () => {
+              try {
+                await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+                  scenarioGraph: newScenarioGraph,
+                  forecastPayload: forecastData,
+                  decisions: newDecisions,
+                  featureImportance,
+                  causalEvents,
+                  storeAnalytics,
+                  causalFactorAnalysis,
+                  fullReports,
+                  decisionSupport,
+                  categoryAnalysis,
+                  storeDemandCauses
+                });
+              } catch (err) {
+                console.error('Error saving analysis to Firestore:', err);
+              }
+            }, 500);
+          }
+        }
     } catch (err) {
       console.error(err);
       setError(String(err.message || err));
@@ -149,11 +473,69 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
   };
 
+
   const handleFileUploadAndAnalyze = async (e) => {
     const f = e?.target?.files?.[0];
     if (!f) return;
+    
+    if (!currentUser) {
+      setError('Please log in to upload files');
+      return;
+    }
+    
     setFile(f);
+
+    // Run causal forecast
     await runForecastWithEvents(f, causalEvents);
+
+    const forecastForm = new FormData();
+    forecastForm.append('file', f);
+
+    // Fetch all reports in parallel
+    try {
+      const results = await Promise.all([
+        fetch('http://127.0.0.1:5000/store-analytics', { method: 'POST', body: forecastForm })
+          .then(res => res.ok ? res.json() : null),
+        
+        fetch('http://127.0.0.1:5000/causal-factors-report', { method: 'POST', body: forecastForm })
+          .then(res => res.ok ? res.json() : null),
+        
+        fetch('http://127.0.0.1:5000/full-reports', { method: 'POST', body: forecastForm })
+          .then(res => res.ok ? res.json() : null),
+        
+        fetchDecisionSupport(f).then(() => decisionSupport),
+        fetchCategoryAnalysis(f).then(() => categoryAnalysis),
+        fetchStoreDemandCauses(f).then(() => storeDemandCauses)
+      ]);
+      
+      // Set all the states
+      if (results[0]) setStoreAnalytics(results[0]);
+      if (results[1]) setCausalFactorAnalysis(results[1]);
+      if (results[2]) setFullReports(results[2]);
+      
+      // Wait a bit for all states to update
+      // Save with the results we just fetched
+      setTimeout(async () => {
+        if (currentUser) {
+          await saveCurrentStateToFirestore(currentUser.uid, f.name, {
+            scenarioGraph: scenarioGraph, // This will be set from runForecastWithEvents
+            forecastPayload: forecastPayload,
+            decisions: decisions,
+            featureImportance: featureImportance,
+            causalEvents: causalEvents,
+            storeAnalytics: results[0],
+            causalFactorAnalysis: results[1],
+            fullReports: results[2],
+            decisionSupport: decisionSupport,
+            categoryAnalysis: categoryAnalysis,
+            storeDemandCauses: storeDemandCauses
+          });
+        }
+      }, 2000); // Increased delay to ensure all states are updated
+    } catch (err) {
+      console.error("Error fetching reports:", err);
+      setError(String(err));
+    }
   };
 
   const handleAddEvent = async () => {
@@ -183,13 +565,58 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     setCausalEvents(updatedEvents);
     setShowEventModal(false);
     setNewEvent({ type: 'weather_hot', startDate: '', endDate: '', impact: eventTypes[0].impact, description: '' });
-    if (file) await runForecastWithEvents(file, updatedEvents);
+    
+    if (file) {
+      await runForecastWithEvents(file, updatedEvents);
+
+      // Save to Firestore with updated events - use longer delay
+      setTimeout(async () => {
+        if (currentUser) {
+          await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+            scenarioGraph: scenarioGraph, // Will be updated by runForecastWithEvents
+            forecastPayload: forecastPayload,
+            decisions: decisions,
+            featureImportance: featureImportance,
+            causalEvents: updatedEvents,
+            storeAnalytics: storeAnalytics,
+            causalFactorAnalysis: causalFactorAnalysis,
+            fullReports: fullReports,
+            decisionSupport: decisionSupport,
+            categoryAnalysis: categoryAnalysis,
+            storeDemandCauses: storeDemandCauses
+          });
+        }
+      }, 1500);
+    }
+    
   };
 
   const handleRemoveEvent = async (id) => {
     const updatedEvents = causalEvents.filter(e => e.id !== id);
     setCausalEvents(updatedEvents);
-    if (file) await runForecastWithEvents(file, updatedEvents);
+    
+    if (file) {
+  await runForecastWithEvents(file, updatedEvents);
+  
+  // Save to Firestore with updated events
+  setTimeout(async () => {
+    if (currentUser) {
+      await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+        scenarioGraph,
+        forecastPayload,
+        decisions,
+        featureImportance,
+        causalEvents: updatedEvents,
+        storeAnalytics,
+        causalFactorAnalysis,
+        fullReports,
+        decisionSupport,
+        categoryAnalysis,
+        storeDemandCauses
+      });
+    }
+  }, 500);
+}
   };
 
   const aggregateData = (data, view) => {
@@ -277,7 +704,20 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const avgPredicted = forecastData.length ? Math.round(forecastData.reduce((s, f) => s + (f.predicted || 0), 0) / forecastData.length) : 0;
   const eventColors = {};
   causalEvents.forEach(event => { eventColors[`${event.typeLabel}_${event.id}`] = event.color; });
-  const getChartHeight = () => ({ daily: 450, weekly: 400, monthly: 380, quarterly: 350 }[timeView] || 320);
+  const getChartHeight = () => ({ daily: 350, weekly: 320, monthly: 300, quarterly: 280 }[timeView] || 280);
+
+  if (isLoadingFromFirebase) {
+    return (
+      <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading your saved data...</p>
+          </div>
+        </div>
+      </LayoutWrapper>
+    );
+  }
 
   return (
     <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
@@ -286,20 +726,27 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         description="Factor Impact, Event Planning & Advanced Forecasting for Beverage Sales" 
         icon={TrendingUp}
         onBack={onBack} />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main className="max-w-[85%] mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="space-y-6">
             
             <Card className="p-6">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+                  {file && (
+                    <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Current file: {file.name}
+                    </p>
+                  )}
                 </div>
-                <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
-                  <Upload size={18} />
-                  <span>{isLoading ? 'Processing...' : 'Upload'}</span>
-                  <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
-                </label>
+                <div className="flex gap-2">
+                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
+                    <Upload size={18} />
+                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
+                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
+                  </label>
+                </div>
               </div>
               {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
               {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
@@ -397,13 +844,15 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </>
             )}
 
-            <Card className="p-6">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">1. Combined Sales Overview</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Historical data and forecast with events</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 ">
+              {/* Chart 1: Combined Overview - Takes full width when alone, half when with others */}
+              <Card className="p-6 lg:col-span-2">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-center">Sales Overview</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 ">Historical data and forecast with events</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                   {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
                     <button key={view} onClick={() => setTimeView(view)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${timeView === view ? 'text-white shadow-lg' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`} style={timeView === view ? { backgroundColor: theme.chart } : {}}>
                       {view.charAt(0).toUpperCase() + view.slice(1)}
@@ -420,7 +869,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />
-                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                      {(timeView === 'daily' || timeView === 'weekly') ? (
                         <>
                           <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.3} name="Baseline (No Events)" radius={[4, 4, 0, 0]} />
@@ -454,10 +903,10 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               )}
               
               {forecastPayload && displayData.length > 0 && (
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-                    <div className="text-sm font-medium text-green-800 dark:text-green-400">Avg {timeView === 'daily' ? 'Daily' : timeView === 'weekly' ? 'Weekly' : timeView === 'monthly' ? 'Monthly' : timeView === 'quarterly' ? 'Quarterly' : 'Yearly'} Sales</div>
-                    <div className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{avgPredicted.toLocaleString()}</div>
+                <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                    <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
+                    <div className="text-xl font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
                     {causalEvents.length > 0 && <div className="text-xs text-green-700 dark:text-green-400 mt-2">With {causalEvents.length} event{causalEvents.length > 1 ? 's' : ''} impact</div>}
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
@@ -487,11 +936,11 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             </Card>
 
             {displayData.length > 0 && forecastData.length > 0 && (
-              <Card className="p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">2. Forecast with Event Impact Breakdown</h2>
+            <Card className="p-6">
+       
+                  <h2 className="text-lg font-semiboldf text-gray-900 dark:text-white mb-4">2. Forecast with Event Impact Breakdown</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Detailed view of how each event affects the forecast</p>
-                </div>
+
                 {causalEvents.length === 0 ? (
                   <>
                     <div style={{ height: 420 }}>
@@ -502,7 +951,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                           <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                           <Tooltip content={<CustomTooltip />} />
                           <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
-                          {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                         {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                             <>
                               <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
                               <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={3} dot={{ fill: theme.chart, r: 4 }} name="Baseline Forecast" />
@@ -524,7 +973,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   </>
                 ) : (
                   <>
-                    <div style={{ height: 420 }}>
+                    <div style={{ height: 320 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={forecastData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -532,7 +981,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                           <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                           <Tooltip content={<CustomTooltip />} />
                           <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
-                          {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                          {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                             <>
                               <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[4, 4, 0, 0]} />
                               {scenarioGraph?.eventNames?.map((eventName, idx) => {
@@ -577,22 +1026,24 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 )}
               </Card>
             )}
+            
+
 
             {displayData.length > 0 && displayData.some(d => d.actual !== null) && (
               <Card className="p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">3. Historical Sales Analysis</h2>
+ 
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">3. Historical Sales Analysis</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Actual sales performance and trends over time</p>
-                </div>
-                <div style={{ height: 420 }}>
-                  <ResponsiveContainer width="100%" height="100%">
+
+                  <div style={{ height: 420 }}>
+                    <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                       <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 10, fill: '#9CA3AF' }} angle={-45} textAnchor="end" height={80} />
                       <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                      {(timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
+                      {(timeView === 'daily' || timeView === 'weekly' || timeView === 'monthly' || timeView === 'quarterly' || timeView === 'yearly') ? (
                         <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual Sales" radius={[4, 4, 0, 0]} />
                       ) : (
                         <>
@@ -609,7 +1060,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="mt-1 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {(() => {
                     const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
                     const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
@@ -654,6 +1105,341 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   })()}
                 </div>
               </Card>
+              
+            )}
+            </div>
+
+
+            {storeAnalytics && (
+              <Card className="p-0 overflow-hidden">
+                <CollapsibleSection title="📊 Store-Level Analytics" defaultOpen={false}>
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Top Store Buyers</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {storeAnalytics.top_buyers?.length > 6 && (
+                            <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                              Show {storeAnalytics.top_buyers.length - 6} more stores...
+                            </button>
+                          )}
+                        {storeAnalytics.top_buyers?.slice(0, 6).map((store, idx) => (
+                        <div key={idx} className="p-4 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+                          <div className="text-sm font-medium text-blue-800 dark:text-blue-400">#{idx + 1} {store.name}</div>
+                          <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{store.sales.toLocaleString()}</div>
+                          <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">Total purchases</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {storeAnalytics.store_demand_patterns && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Peak Demand Days by Store</h4>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {Object.entries(storeAnalytics.store_demand_patterns).slice(0, 5).map(([store, days], idx) => (
+                          <div key={idx} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                            <div className="font-semibold text-gray-900 dark:text-white mb-2">{store}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                              {days.slice(0, 3).map((day, dayIdx) => (
+                                <div key={dayIdx}>• {day.DATE}: {day.total.toLocaleString()} units</div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                </CollapsibleSection>
+              </Card>
+            )}
+
+            {causalFactorAnalysis && causalFactorAnalysis.factors && causalFactorAnalysis.factors.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">🔍 Causal Factor Analysis</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {causalFactorAnalysis.factors.map((f, idx) => (
+                    <div key={idx} className={`p-4 rounded-xl border-2 ${f.impact >= 0 ? 'border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20' : 'border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20'}`}>
+                      <div className={`text-sm font-medium ${f.impact >= 0 ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>{f.factor}</div>
+                      <div className={`text-2xl font-bold mt-1 ${f.impact >= 0 ? 'text-green-900 dark:text-green-300' : 'text-red-900 dark:text-red-300'}`}>
+                        {f.impact > 0 ? '+' : ''}{f.impact.toFixed(1)}%
+                      </div>
+                      <div className={`text-xs mt-1 ${f.impact >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                        {f.impact >= 0 ? 'Increases sales' : 'Decreases sales'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {fullReports && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📈 Full Reporting System</h3>
+                <div className="space-y-6">
+                  {fullReports.monthly && fullReports.monthly.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Monthly Sales</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {fullReports.monthly.slice(-6).map((m, idx) => (
+                          <div key={idx} className="p-3 rounded-lg border bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
+                            <div className="text-xs font-medium text-purple-800 dark:text-purple-400">{m.month}</div>
+                            <div className="text-lg font-bold text-purple-900 dark:text-purple-300 mt-1">{m.total_sales.toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {fullReports.weekly && fullReports.weekly.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Recent Weekly Sales</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {fullReports.weekly.slice(-5).map((w, idx) => (
+                          <div key={idx} className="p-3 rounded-lg border bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-800">
+                            <div className="text-xs font-medium text-blue-800 dark:text-blue-400">{w.week}</div>
+                            <div className="text-lg font-bold text-blue-900 dark:text-blue-300 mt-1">{w.total_sales.toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {fullReports.yearly && fullReports.yearly.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Yearly Sales</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {fullReports.yearly.map((y, idx) => (
+                          <div key={idx} className="p-4 rounded-xl border-2 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800">
+                            <div className="text-sm font-medium text-amber-800 dark:text-amber-400">{y.year}</div>
+                            <div className="text-2xl font-bold text-amber-900 dark:text-amber-300 mt-1">{y.total_sales.toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+
+          </div>
+
+
+          {/* Decision Support System - AI-Powered Insights */}
+            {decisionSupport && (
+              <Card className="p-6">
+                    <h2 className="text-xl font-bold text-purple-900 dark:text-purple-300 flex items-center gap-2">
+                      <Zap className="w-6 h-6" />
+                      AI-Powered Decision Support System
+                    </h2>
+                    <p className="text-sm text-purple-700 dark:text-purple-400 mt-1">
+                      Strategic insights and recommendations powered by {decisionSupport.generated_by}
+                    </p>
+              
+                 
+                
+
+                {/* Key Metrics Dashboard */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Total Sales</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {decisionSupport.metrics?.total_sales?.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Avg Daily</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {decisionSupport.metrics?.avg_daily?.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Trend</div>
+                    <div className={`text-2xl font-bold mt-1 ${decisionSupport.metrics?.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {decisionSupport.metrics?.trend > 0 ? '+' : ''}{decisionSupport.metrics?.trend?.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Peak Month</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {decisionSupport.metrics?.peak_month || 'N/A'}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400">Volatility</div>
+                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-1">
+                      {((decisionSupport.metrics?.volatility || 0) * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* Store Performance Metrics */}
+                {decisionSupport.metrics?.store_metrics && (
+                  <div className="mb-6 p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
+                    <h4 className="text-md font-semibold text-purple-900 dark:text-purple-300 mb-3">Top Store Performance</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Top Performer</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">
+                          {decisionSupport.metrics.store_metrics.top_store}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Total Sales</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">
+                          {decisionSupport.metrics.store_metrics.top_store_sales?.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Total Stores</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">
+                          {decisionSupport.metrics.store_metrics.total_stores}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Insights */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-purple-200 dark:border-purple-700">
+                  <div className="prose prose-purple dark:prose-invert max-w-none">
+                    <div className="text-sm leading-relaxed space-y-4">
+                      {decisionSupport.insights.split('\n').map((line, idx) => {
+                        // Headers
+                        if (line.startsWith('# ')) {
+                          return <h2 key={idx} className="text-xl font-bold mt-6 mb-3 text-purple-900 dark:text-purple-300">{line.substring(2)}</h2>;
+                        }
+                        if (line.startsWith('## ')) {
+                          return <h3 key={idx} className="text-lg font-semibold mt-4 mb-2 text-purple-800 dark:text-purple-400">{line.substring(3)}</h3>;
+                        }
+                        if (line.startsWith('### ')) {
+                          return <h4 key={idx} className="text-md font-medium mt-3 mb-2 text-purple-700 dark:text-purple-500">{line.substring(4)}</h4>;
+                        }
+                        // Bullet points
+                        if (line.startsWith('- ') || line.startsWith('* ')) {
+                          return (
+                            <div key={idx} className="flex items-start gap-2 ml-4">
+                              <span className="text-purple-600 dark:text-purple-400 mt-1">•</span>
+                              <span className="flex-1 text-gray-700 dark:text-gray-300">{line.substring(2)}</span>
+                            </div>
+                          );
+                        }
+                        // Regular paragraphs
+                        if (line.trim()) {
+                          return <p key={idx} className="text-gray-700 dark:text-gray-300">{line}</p>;
+                        }
+                        return null;
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Category & Bottle Size Analysis */}
+            {categoryAnalysis && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  📦 Product Category & Bottle Size Analysis
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Categories */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Sales by Category</h4>
+                    <div className="space-y-3">
+                      {categoryAnalysis.categories?.map((cat, idx) => {
+                        const total = categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0);
+                        const percentage = ((cat.sales / total) * 100).toFixed(1);
+                        return (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{cat.category}</span>
+                              <span className="font-semibold" style={{ color: theme.chart }}>{cat.sales.toLocaleString()} ({percentage}%)</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${percentage}%`, backgroundColor: theme.chart }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Bottle Sizes */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Sales by Bottle Size</h4>
+                    <div className="space-y-3">
+                      {categoryAnalysis.bottle_sizes?.map((size, idx) => {
+                        const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
+                        const percentage = ((size.sales / total) * 100).toFixed(1);
+                        return (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{size.size}</span>
+                              <span className="font-semibold text-blue-600 dark:text-blue-400">{size.sales.toLocaleString()} ({percentage}%)</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="h-2 rounded-full transition-all duration-500 bg-blue-500" style={{ width: `${percentage}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                  Total SKUs analyzed: {categoryAnalysis.total_skus}
+                </div>
+              </Card>
+            )}
+
+            {/* Store Demand Causes */}
+            {storeDemandCauses && storeDemandCauses.causes && storeDemandCauses.causes.length > 0 && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  🏪 Store Demand Analysis & Root Causes
+                </h3>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {storeDemandCauses.causes.map((cause, idx) => {
+                    const statusColors = {
+                      stopped: 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20',
+                      critical: 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20',
+                      warning: 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20',
+                      variable: 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20',
+                      good: 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20',
+                      stable: 'border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
+                    };
+                    return (
+                      <div key={idx} className={`p-4 rounded-lg border-2 ${statusColors[cause.status] || statusColors.stable}`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-semibold text-gray-900 dark:text-white">{cause.store}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {cause.total_orders} orders
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                          {cause.cause}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Recent Avg:</span>
+                            <span className="font-semibold ml-1">{Math.round(cause.recent_avg).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Overall Avg:</span>
+                            <span className="font-semibold ml-1">{Math.round(cause.overall_avg).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Last Order:</span>
+                            <span className="font-semibold ml-1">{cause.days_since_last_order}d ago</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
             )}
 
             {featureImportance.length > 0 && (
@@ -674,8 +1460,6 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 </div>
               </Card>
             )}
-
-          </div>
         </main>
       </div>
     </LayoutWrapper>

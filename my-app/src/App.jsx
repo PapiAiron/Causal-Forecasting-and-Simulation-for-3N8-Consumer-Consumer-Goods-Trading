@@ -18,8 +18,10 @@ import ManageAccounts from "./pages/ManageAccounts";
 import AdminUserVerification from "./pages/AdminUserVerification";
 import SettingsPage from "./pages/SettingsPage";
 import AppearanceSettings from "./pages/AppearanceSettings";
-import Chatbot from "./components/Chatbot";
 import DeliveryTracking from "./pages/DeliveryTracking";
+import StoreAnalytics from "./pages/StoreAnalytics";
+import Reporting from "./pages/Reporting";
+import Chatbot from "./components/Chatbot";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState(() => {
@@ -137,6 +139,9 @@ const App = () => {
   // Protected pages that require authentication
   const protectedPages = [
     "home", 
+    "delivery-tracking",
+    "store-analytics",
+    "reporting",
     "causal-analysis", 
     "simulation",
     "settings",
@@ -226,6 +231,9 @@ const App = () => {
               <div className="text-gray-900 dark:text-white font-sans">
         {currentPage === "getstarted" && <GetStarted onNavigate={handleNavigation} />}
         {currentPage === "home" && <DashboardHome onNavigate={handleNavigation} onBack={null} />}
+        {currentPage === "delivery-tracking" && <DeliveryTracking onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "store-analytics" && <StoreAnalytics onNavigate={handleNavigation} onBack={onBack} />}
+        {currentPage === "reporting" && <Reporting onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "causal-analysis" && <CausalAnalysis onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "simulation" && <Simulation onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "settings" && <SettingsPage onNavigate={handleNavigation} onBack={onBack} />}
@@ -238,7 +246,6 @@ const App = () => {
         {currentPage === "accountsettings" && <AccountSettings onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "manage-accounts" && <ManageAccounts onNavigate={handleNavigation} onBack={onBack} />}
         {currentPage === "user-verification" && <AdminUserVerification onNavigate={handleNavigation} onBack={onBack} />}
-        {currentPage === "delivery-tracking" && <DeliveryTracking onNavigate={handleNavigation} onBack={onBack} />}
       </div>
       </PageTransition>
        {user && currentPage !== "login" && currentPage !== "signup" && currentPage !== "getstarted" && <Chatbot />}

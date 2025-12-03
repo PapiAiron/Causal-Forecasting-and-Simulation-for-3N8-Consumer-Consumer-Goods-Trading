@@ -1,0 +1,19 @@
+Git command lines
+
+git pull
+git init
+git add .
+git commit -m " "
+git push
+
+merging from main branch
+git branch
+git checkout my-branch
+git fetch origin
+git checkout main
+git pull origin main
+git checkout my-branch
+git merge main (if there are conflicts, fix in merge editor)
+git add .
+git commit
+git push origin my-branch

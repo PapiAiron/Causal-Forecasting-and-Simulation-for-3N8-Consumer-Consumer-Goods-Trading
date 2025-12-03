@@ -1580,214 +1580,215 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
 
             {/* Row 1: Two Charts Side by Side - FLEXBOX VERSION */}
-{displayData.length > 0 && (
-  <div className="flex flex-col lg:flex-row gap-6 mb-6">
-    
-    {/* LEFT: Historical Sales */}
-    <div className="flex-1 w-full lg:w-1/2">
-      <Card className="p-6 h-full">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">📉 Historical Sales</h3>
-        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">Actual performance trends</p>
-        
-        {displayData.some(d => d.actual !== null) ? (
-          <>
-            <div style={{ height: 320 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                  <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
-                  <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
-                  <Tooltip content={<CustomTooltip />} />
-                  {timeView === 'daily' || timeView === 'weekly' ? (
-                    <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual" radius={[3, 3, 0, 0]} />
-                  ) : (
-                    <>
-                      <defs>
-                        <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} fill="url(#colorActual)" name="Actual" />
-                    </>
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* KPI Cards for Historical */}
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {(() => {
-                const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
-                const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
-                const avgSales = historicalData.length > 0 ? totalSales / historicalData.length : 0;
-                const maxSales = historicalData.length > 0 ? Math.max(...historicalData.map(d => d.actual)) : 0;
-                let growthRate = 0;
-                if (historicalData.length >= 2) {
-                  const firstHalf = historicalData.slice(0, Math.floor(historicalData.length / 2));
-                  const secondHalf = historicalData.slice(Math.floor(historicalData.length / 2));
-                  const firstAvg = firstHalf.reduce((s, d) => s + d.actual, 0) / firstHalf.length;
-                  const secondAvg = secondHalf.reduce((s, d) => s + d.actual, 0) / secondHalf.length;
-                  growthRate = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg * 100) : 0;
-                }
+              {displayData.length > 0 && (
+                <div className="flex flex-col lg:flex-row gap-6 mb-6">
                 
-                return (
-                  <>
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-                      <div className="text-xs font-medium text-green-800 dark:text-green-400">Total</div>
-                      <div className="text-sm font-bold text-green-900 dark:text-green-300">{Math.round(totalSales).toLocaleString()}</div>
+              {/* RIGHT: Forecast Event Impact */}
+              <div className="flex-1 w-full lg:w-1/2">
+                <Card className="p-6 h-full">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">📈 Forecast Event Impact</h2>
                     </div>
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Average</div>
-                      <div className="text-sm font-bold text-blue-900 dark:text-blue-300">{Math.round(avgSales).toLocaleString()}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
+                        <button 
+                          key={view} 
+                          onClick={() => setTimeView(view)} 
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            timeView === view 
+                              ? 'text-white shadow-lg scale-105' 
+                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                          }`} 
+                          style={timeView === view ? { backgroundColor: theme.chart } : {}}
+                        >
+                          {view.charAt(0).toUpperCase() + view.slice(1)}
+                        </button>
+                      ))}
                     </div>
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
-                      <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Peak</div>
-                      <div className="text-sm font-bold text-purple-900 dark:text-purple-300">{Math.round(maxSales).toLocaleString()}</div>
-                    </div>
-                    <div className={`p-2 rounded-lg border ${growthRate >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-800'}`}>
-                      <div className={`text-xs font-medium ${growthRate >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-orange-800 dark:text-orange-400'}`}>Growth</div>
-                      <div className={`text-sm font-bold ${growthRate >= 0 ? 'text-emerald-900 dark:text-emerald-300' : 'text-orange-900 dark:text-orange-300'}`}>
-                        {growthRate > 0 ? '+' : ''}{growthRate.toFixed(1)}%
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center justify-center h-64 text-gray-500 dark:text-gray-400">
-            No historical data available
-          </div>
-        )}
-      </Card>
-    </div>
+                  </div>
 
-    {/* RIGHT: Forecast Event Impact */}
-    <div className="flex-1 w-full lg:w-1/2">
-      <Card className="p-6 h-full">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">📈 Forecast Event Impact</h2>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
-              <button 
-                key={view} 
-                onClick={() => setTimeView(view)} 
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  timeView === view 
-                    ? 'text-white shadow-lg scale-105' 
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`} 
-                style={timeView === view ? { backgroundColor: theme.chart } : {}}
-              >
-                {view.charAt(0).toUpperCase() + view.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {(() => {
-          const hasEvents = causalEvents.length > 0;
-          const chartData = hasEvents ? forecastData : displayData.filter(d => d.predicted !== null);
-          
-          return (
-            <>
-              <div style={{ height: 320 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#4c5b74ff" opacity={0.1} />
-                    <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
-                    <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
-                    <Tooltip content={<CustomTooltip />} />
+                  {(() => {
+                    const hasEvents = causalEvents.length > 0;
+                    const chartData = hasEvents ? forecastData : displayData.filter(d => d.predicted !== null);
                     
-                    {hasEvents ? (
-                      <>
-                        <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline" radius={[3, 3, 0, 0]} />
-                        {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                          const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                          return <Bar key={eventName} dataKey={eventName} stackId="events" fill={color} fillOpacity={0.8} name={eventName.split('_').slice(0, -1).join(' ')} radius={idx === scenarioGraph.eventNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />;
-                        })}
-                        <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Total" />
-                      </>
-                    ) : (
-                      <>
-                        <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[3, 3, 0, 0]} />
-                        <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Predicted" />
-                      </>
-                    )}
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              
-              {hasEvents ? (
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {causalEvents.map((event) => {
-                    const eventKey = `${event.typeLabel}_${event.id}`;
-                    const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
-                    const Icon = getIconComponent(event.iconName);
                     return (
-                      <div key={event.id} className="p-2 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
-                        <div className="flex items-center gap-1 mb-1">
-                          <Icon className="w-3 h-3" style={{ color: event.color }} />
-                          <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">{event.typeLabel}</span>
+                      <>
+                        <div style={{ height: 320 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#4c5b74ff" opacity={0.1} />
+                              <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
+                              <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
+                              <Tooltip content={<CustomTooltip />} />
+                              
+                              {hasEvents ? (
+                                <>
+                                  <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline" radius={[3, 3, 0, 0]} />
+                                  {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                                    const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                                    return <Bar key={eventName} dataKey={eventName} stackId="events" fill={color} fillOpacity={0.8} name={eventName.split('_').slice(0, -1).join(' ')} radius={idx === scenarioGraph.eventNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />;
+                                  })}
+                                  <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Total" />
+                                </>
+                              ) : (
+                                <>
+                                  <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[3, 3, 0, 0]} />
+                                  <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Predicted" />
+                                </>
+                              )}
+                            </ComposedChart>
+                          </ResponsiveContainer>
                         </div>
-                        <div className="text-sm font-bold" style={{ color: event.color }}>
-                          {totalImpact > 0 ? '+' : ''}{Math.round(totalImpact).toLocaleString()}
+                        
+                        {hasEvents ? (
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            {causalEvents.map((event) => {
+                              const eventKey = `${event.typeLabel}_${event.id}`;
+                              const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
+                              const Icon = getIconComponent(event.iconName);
+                              return (
+                                <div key={event.id} className="p-2 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Icon className="w-3 h-3" style={{ color: event.color }} />
+                                    <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">{event.typeLabel}</span>
+                                  </div>
+                                  <div className="text-sm font-bold" style={{ color: event.color }}>
+                                    {totalImpact > 0 ? '+' : ''}{Math.round(totalImpact).toLocaleString()}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                            <p className="text-xs text-blue-800 dark:text-blue-400">
+                              💡 Showing baseline forecast. Add events above to see their impact on sales.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {/* KPI Cards for Forecast */}
+                  {forecastPayload && displayData.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                        <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
+                        <div className="text-lg font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
+                      </div>
+                      
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                        <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Total Period</div>
+                        <div className="text-lg font-bold text-blue-900 dark:text-blue-300">{Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
+                      </div>
+                      
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                        <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Active Events</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">{causalEvents.length}</div>
+                      </div>
+                      
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
+                        <div className="text-xs font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
+                        <div className="text-lg font-bold text-orange-900 dark:text-orange-300">
+                          {(() => {
+                            const totalPredicted = forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0);
+                            const totalBaseline = forecastData.reduce((sum, d) => sum + (d.baseline || 0), 0);
+                            const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
+                            return (impact > 0 ? '+' : '') + impact.toFixed(1);
+                          })()}%
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                  <p className="text-xs text-blue-800 dark:text-blue-400">
-                    💡 Showing baseline forecast. Add events above to see their impact on sales.
-                  </p>
-                </div>
-              )}
-            </>
-          );
-        })()}
-
-        {/* KPI Cards for Forecast */}
-        {forecastPayload && displayData.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-              <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
-              <div className="text-lg font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
-            </div>
-            
-            <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
-              <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Total Period</div>
-              <div className="text-lg font-bold text-blue-900 dark:text-blue-300">{Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
-            </div>
-            
-            <div className="p-3 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
-              <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Active Events</div>
-              <div className="text-lg font-bold text-purple-900 dark:text-purple-300">{causalEvents.length}</div>
-            </div>
-            
-            <div className="p-3 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
-              <div className="text-xs font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
-              <div className="text-lg font-bold text-orange-900 dark:text-orange-300">
-                {(() => {
-                  const totalPredicted = forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0);
-                  const totalBaseline = forecastData.reduce((sum, d) => sum + (d.baseline || 0), 0);
-                  const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
-                  return (impact > 0 ? '+' : '') + impact.toFixed(1);
-                })()}%
+                    </div>
+                  )}
+                </Card>
               </div>
+
+
+               {/* LEFT: Historical Sales */}
+                  <div className="flex-1 w-full lg:w-1/2">
+                    <Card className="p-6 h-full">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">📉 Historical Sales</h3>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">Actual performance trends</p>
+                      
+                      {displayData.some(d => d.actual !== null) ? (
+                        <>
+                          <div style={{ height: 320 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
+                                <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
+                                <Tooltip content={<CustomTooltip />} />
+                                {timeView === 'daily' || timeView === 'weekly' ? (
+                                  <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual" radius={[3, 3, 0, 0]} />
+                                ) : (
+                                  <>
+                                    <defs>
+                                      <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                                      </linearGradient>
+                                    </defs>
+                                    <Area type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} fill="url(#colorActual)" name="Actual" />
+                                  </>
+                                )}
+                              </ComposedChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* KPI Cards for Historical */}
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            {(() => {
+                              const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
+                              const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
+                              const avgSales = historicalData.length > 0 ? totalSales / historicalData.length : 0;
+                              const maxSales = historicalData.length > 0 ? Math.max(...historicalData.map(d => d.actual)) : 0;
+                              let growthRate = 0;
+                              if (historicalData.length >= 2) {
+                                const firstHalf = historicalData.slice(0, Math.floor(historicalData.length / 2));
+                                const secondHalf = historicalData.slice(Math.floor(historicalData.length / 2));
+                                const firstAvg = firstHalf.reduce((s, d) => s + d.actual, 0) / firstHalf.length;
+                                const secondAvg = secondHalf.reduce((s, d) => s + d.actual, 0) / secondHalf.length;
+                                growthRate = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg * 100) : 0;
+                              }
+                              
+                              return (
+                                <>
+                                  <div className="p-2 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                                    <div className="text-xs font-medium text-green-800 dark:text-green-400">Total</div>
+                                    <div className="text-sm font-bold text-green-900 dark:text-green-300">{Math.round(totalSales).toLocaleString()}</div>
+                                  </div>
+                                  <div className="p-2 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                                    <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Average</div>
+                                    <div className="text-sm font-bold text-blue-900 dark:text-blue-300">{Math.round(avgSales).toLocaleString()}</div>
+                                  </div>
+                                  <div className="p-2 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                                    <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Peak</div>
+                                    <div className="text-sm font-bold text-purple-900 dark:text-purple-300">{Math.round(maxSales).toLocaleString()}</div>
+                                  </div>
+                                  <div className={`p-2 rounded-lg border ${growthRate >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-800'}`}>
+                                    <div className={`text-xs font-medium ${growthRate >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-orange-800 dark:text-orange-400'}`}>Growth</div>
+                                    <div className={`text-sm font-bold ${growthRate >= 0 ? 'text-emerald-900 dark:text-emerald-300' : 'text-orange-900 dark:text-orange-300'}`}>
+                                      {growthRate > 0 ? '+' : ''}{growthRate.toFixed(1)}%
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+                          No historical data available
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+              
             </div>
-          </div>
-        )}
-      </Card>
-    </div>
-    
-  </div>
-)}
+          )}
 
 
                   {storeAnalytics && (

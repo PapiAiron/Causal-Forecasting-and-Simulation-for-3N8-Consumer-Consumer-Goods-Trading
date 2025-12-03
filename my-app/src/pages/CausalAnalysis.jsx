@@ -17,7 +17,12 @@ import { Card, Header } from '../components/SharedComponents';
 import { LayoutWrapper } from './DashboardHome';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth'; // ⭐ ADD THIS LINE
+import { createPortal } from 'react-dom';
+
+export function Portal({ children }) {
+  return createPortal(children, document.body);
+}
 
   const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -74,7 +79,6 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   });
   const [selectedMetricPeriod, setSelectedMetricPeriod] = useState('month');
   const [salesQueryResult, setSalesQueryResult] = useState(null);
-  const [showSalesQuery, setShowSalesQuery] = useState(false);
   const [queryType, setQueryType] = useState('date');
   const [queryValue, setQueryValue] = useState('');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -208,9 +212,31 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       if (!res.ok) throw new Error(await res.text() || 'Decision support failed');
       const data = await res.json();
       setDecisionSupport(data);
+      
+      // ⭐ AUTO-SAVE after fetching
+      if (currentUser && file) {
+        setTimeout(async () => {
+          await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+            scenarioGraph,
+            forecastPayload,
+            decisions,
+            featureImportance,
+            causalEvents,
+            storeAnalytics,
+            causalFactorAnalysis,
+            fullReports,
+            decisionSupport: data, // ⭐ Use fresh data
+            categoryAnalysis,
+            storeDemandCauses
+          });
+        }, 500);
+      }
+      
+      return data; // ⭐ Return the data
     } catch (err) {
       console.error('Decision support error:', err);
       setError(String(err.message || err));
+      return null;
     } finally {
       setLoadingDecisions(false);
     }
@@ -229,9 +255,32 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       if (res.ok) {
         const data = await res.json();
         setCategoryAnalysis(data);
+        
+        // ⭐ AUTO-SAVE after fetching
+        if (currentUser && file) {
+          setTimeout(async () => {
+            await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+              scenarioGraph,
+              forecastPayload,
+              decisions,
+              featureImportance,
+              causalEvents,
+              storeAnalytics,
+              causalFactorAnalysis,
+              fullReports,
+              decisionSupport,
+              categoryAnalysis: data, // ⭐ Use fresh data
+              storeDemandCauses
+            });
+          }, 500);
+        }
+        
+        return data; // ⭐ Return the data
       }
+      return null;
     } catch (err) {
       console.error('Category analysis error:', err);
+      return null;
     }
   };
 
@@ -248,9 +297,32 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       if (res.ok) {
         const data = await res.json();
         setStoreDemandCauses(data);
+        
+        // ⭐ AUTO-SAVE after fetching
+        if (currentUser && file) {
+          setTimeout(async () => {
+            await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+              scenarioGraph,
+              forecastPayload,
+              decisions,
+              featureImportance,
+              causalEvents,
+              storeAnalytics,
+              causalFactorAnalysis,
+              fullReports,
+              decisionSupport,
+              categoryAnalysis,
+              storeDemandCauses: data // ⭐ Use fresh data
+            });
+          }, 500);
+        }
+        
+        return data; // ⭐ Return the data
       }
+      return null;
     } catch (err) {
       console.error('Store demand causes error:', err);
+      return null;
     }
   };
 
@@ -265,33 +337,64 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     setError('');
 
     try {
-      // Fetch all AI analyses in parallel
-      const results = await Promise.all([
-        fetchDecisionSupport(file),
-        fetchCategoryAnalysis(file),
-        fetchStoreDemandCauses(file)
+      // ⭐ FIX: Fetch all AI analyses and get the data directly
+      const [decisionData, categoryData, storeCausesData] = await Promise.all([
+        (async () => {
+          const form = new FormData();
+          form.append('file', file);
+          const res = await fetch('http://127.0.0.1:5000/decision-support', {
+            method: 'POST',
+            body: form,
+          });
+          return res.ok ? await res.json() : null;
+        })(),
+        
+        (async () => {
+          const form = new FormData();
+          form.append('file', file);
+          const res = await fetch('http://127.0.0.1:5000/category-analysis', {
+            method: 'POST',
+            body: form,
+          });
+          return res.ok ? await res.json() : null;
+        })(),
+        
+        (async () => {
+          const form = new FormData();
+          form.append('file', file);
+          const res = await fetch('http://127.0.0.1:5000/store-demand-causes', {
+            method: 'POST',
+            body: form,
+          });
+          return res.ok ? await res.json() : null;
+        })()
       ]);
 
-      // Give state time to update
-      setTimeout(async () => {
-        // Now save with the updated states
-        await saveCurrentStateToFirestore(currentUser.uid, file.name, {
-          scenarioGraph: scenarioGraph,
-          forecastPayload: forecastPayload,
-          decisions: decisions,
-          featureImportance: featureImportance,
-          causalEvents: causalEvents,
-          storeAnalytics: storeAnalytics,
-          causalFactorAnalysis: causalFactorAnalysis,
-          fullReports: fullReports,
-          decisionSupport: decisionSupport, // Will be updated from fetchDecisionSupport
-          categoryAnalysis: categoryAnalysis, // Will be updated from fetchCategoryAnalysis
-          storeDemandCauses: storeDemandCauses // Will be updated from fetchStoreDemandCauses
-        });
-        
-        setUploadStatus('AI insights regenerated successfully!');
-        setTimeout(() => setUploadStatus(''), 3000);
-      }, 2000);
+      // ⭐ Update states with new data
+      if (decisionData) setDecisionSupport(decisionData);
+      if (categoryData) setCategoryAnalysis(categoryData);
+      if (storeCausesData) setStoreDemandCauses(storeCausesData);
+
+      // ⭐ Wait a bit for React to update
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // ⭐ NOW save with the FRESH data
+      await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+        scenarioGraph: scenarioGraph,
+        forecastPayload: forecastPayload,
+        decisions: decisions,
+        featureImportance: featureImportance,
+        causalEvents: causalEvents,
+        storeAnalytics: storeAnalytics,
+        causalFactorAnalysis: causalFactorAnalysis,
+        fullReports: fullReports,
+        decisionSupport: decisionData || decisionSupport, // ⭐ Use fresh data
+        categoryAnalysis: categoryData || categoryAnalysis, // ⭐ Use fresh data
+        storeDemandCauses: storeCausesData || storeDemandCauses // ⭐ Use fresh data
+      });
+      
+      setUploadStatus('✅ AI insights regenerated and saved!');
+      setTimeout(() => setUploadStatus(''), 3000);
 
     } catch (err) {
       console.error('Error regenerating AI insights:', err);
@@ -956,11 +1059,10 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     
-    // Get week boundaries
+    // Get week boundaries (last 7 days)
+    const weekEnd = new Date(now);
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
+    weekStart.setDate(now.getDate() - 6); // Last 7 days including today
     
     // Get month boundaries
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1182,27 +1284,497 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         description="Factor Impact, Event Planning & Advanced Forecasting for Beverage Sales" 
         icon={TrendingUp}
         onBack={onBack} />
-        <main className="max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-6">  
+        <main className="max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8 py-6">  
           <div className=" gap-6">
-            <div class="grid grid-cols-5 gap-4 mb-4">
-            {/* SALES QUERY CARD */}
-            <Card className="p-6 box col-span-2">
-                <div className="flex justify-between items-center mb-">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🔍 Sales Query</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Search exact sales for specific dates or periods</p>
-                  </div>
-                  <button 
-                    onClick={() => setShowSalesQuery(!showSalesQuery)}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all hover:scale-105"
-                    style={{ backgroundColor: theme.chart }}
-                  >
-                    {showSalesQuery ? <X size={18} /> : <Plus size={18} />}
-                    <span>{showSalesQuery ? 'Close' : 'Open Query'}</span>
-                  </button>
-                </div>
 
-                {showSalesQuery && (
+            
+            <div class="grid grid-cols-4 gap-4 mb-4">
+           
+            <Card className="p-6 box col-span-2">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
+                <div>
+                  <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
+                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+                              {/* AI Insights Status Indicator */}
+                              {decisionSupport && (
+                                <div className="mt-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Zap className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                    <span className="text-green-800 dark:text-green-400 font-medium">
+                                      ✅ AI insights loaded from previous session
+                                    </span>
+                                    <button
+                                      onClick={rerunAIAnalysis}
+                                      disabled={isLoading || !file}
+                                      className="ml-auto px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      🔄 Refresh Insights
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                 {/* File status with session indicator */}
+                  {file && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                        Current file: {file.name}
+                        {!isRealFile && (
+                            <span className="ml-2 px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">
+                              📁 Previous session (events editable)
+                            </span>
+                          )}
+                      </p>
+                      {causalEvents.length > 0 && (
+                        <p className="text-center text-xs text-green-600 dark:text-green-400">
+                          ✅ {causalEvents.length} event(s) saved - Will be preserved on new upload
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
+                    <Upload size={18} />
+                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
+                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
+                  </label>
+                </div>
+              </div>
+              {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
+              {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
+            </Card>
+            
+            <Card className="p-6 box col-span-2">
+
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Causal Events</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Plan and manage events that impact beverage sales</p>
+                </div>
+                <button 
+                  onClick={() => setShowEventModal(true)} 
+                  disabled={!file}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${!file ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} 
+                  style={{ backgroundColor: theme.chart }}
+                  title={!file ? 'Upload data first to add events' : 'Add a new causal event'}
+                >
+                  <Plus size={18} /><span>Add Event</span>
+                </button>
+              </div>
+              <div className="space-y-2">
+                {causalEvents.length === 0 ? (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No causal events added yet. Click "Add Event" to start planning.</div>
+                ) : causalEvents.map(event => {
+                  const Icon = getIconComponent(event.iconName); // Use helper function to get icon
+                  return (
+                    <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-lg" style={{ backgroundColor: event.color + '20' }}>
+                          <Icon className="w-5 h-5" style={{ color: event.color }} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">{event.typeLabel}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {event.startDate} {event.endDate && `to ${event.endDate}`} • Impact: {event.impact > 0 ? '+' : ''}{event.impact}%
+                          </p>
+                          {event.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{event.description}</p>}
+                        </div>
+                      </div>
+                      <button onClick={() => handleRemoveEvent(event.id)} className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                        <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+            </div>
+    
+
+
+            
+
+            {showEventModal && (
+              <Portal>
+                <>
+                  <div 
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]" 
+                    onClick={() => setShowEventModal(false)} 
+                  />
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+                    <Card className="w-full max-w-lg p-6 relative pointer-events-auto">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Causal Event</h3>
+                      <button onClick={() => setShowEventModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Event Type</label>
+                        <select value={newEvent.type} onChange={(e) => {
+                          const selected = eventTypes.find(t => t.value === e.target.value);
+                          setNewEvent({ ...newEvent, type: e.target.value, impact: selected?.impact || 0 });
+                        }} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white">
+                          {eventTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
+                          <input type="date" value={newEvent.startDate} onChange={(e) => setNewEvent({...newEvent, startDate: e.target.value})} min={forecastLimits.minDate || today} max={forecastLimits.maxDate || undefined} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date (Optional)</label>
+                          <input type="date" value={newEvent.endDate} onChange={(e) => setNewEvent({...newEvent, endDate: e.target.value})} min={newEvent.startDate || forecastLimits.minDate || today} max={forecastLimits.maxDate || undefined} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Impact (%)</label>
+                        <input type="number" value={newEvent.impact} onChange={(e) => setNewEvent({...newEvent, impact: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" placeholder="e.g., 25 for +25% or -15 for -15%" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description (Optional)</label>
+                        <textarea value={newEvent.description} onChange={(e) => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" rows={3} placeholder="Additional notes about this event..." />
+                      </div>
+                      <button onClick={handleAddEvent} disabled={isLoading} className="w-full py-2 rounded-xl text-white font-medium transition-all hover:scale-[1.02] disabled:opacity-50" style={{ backgroundColor: theme.chart }}>
+                        {isLoading ? 'Adding Event...' : 'Add Event'}
+                      </button>
+                    </div>
+                  </Card>
+                </div>
+              </>
+            </Portal>
+          )}
+
+
+
+            {/* Row 1: Two Charts Side by Side - FLEXBOX VERSION */}
+              {displayData.length > 0 && (
+                <div className="flex flex-col lg:flex-row gap-6 mb-6">
+                
+              {/* RIGHT: Forecast Event Impact */}
+              <div className="flex-1 w-full lg:w-1/2">
+                <Card className="p-6 h-full">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">📈 Forecast Event Impact</h2>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {['weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
+                        <button 
+                          key={view} 
+                          onClick={() => setTimeView(view)} 
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            timeView === view 
+                              ? 'text-white shadow-lg scale-105' 
+                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                          }`} 
+                          style={timeView === view ? { backgroundColor: theme.chart } : {}}
+                        >
+                          {view.charAt(0).toUpperCase() + view.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const hasEvents = causalEvents.length > 0;
+                    const chartData = hasEvents ? forecastData : displayData.filter(d => d.predicted !== null);
+                    
+                    return (
+                      <>
+                        <div style={{ height: 320 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#4c5b74ff" opacity={0.1} />
+                              <XAxis
+                                dataKey="ds"
+                                stroke="#9CA3AF"
+                                tick={{ fontSize: timeView === "daily" ? 10 : 11, fill: "#9CA3AF" }}
+                                interval="preserveStartEnd"
+                                angle={timeView === "daily" ? -45 : timeView === "weekly" ? -30 : 0}
+                                textAnchor={timeView === "daily" || timeView === "weekly" ? "end" : "middle"}
+                                height={65}
+                                tickFormatter={(value) => {
+                                  // DAILY = already ISO dates → display directly
+                                  if (timeView === "daily") {
+                                    const d = new Date(value);
+                                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                                  }
+
+                                  // WEEKLY
+                                  if (timeView === "weekly") {
+                                    // If already formatted (e.g., "W3 Apr 2023"), just display it
+                                    if (value.startsWith("W")) {
+                                      return value;
+                                    }
+                                    // Handle "2023-W03" format
+                                    const [year, week] = value.split("-W").map(Number);
+                                    const jan4 = new Date(year, 0, 4);
+                                    const monday = new Date(jan4);
+                                    monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (week - 1) * 7);
+                                    return monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                                  }
+
+                                  // MONTHLY
+                                  if (timeView === "monthly" && value.includes(" ")) {
+                                    const [month, year] = value.split(" ");
+                                    return `${month} '${year.slice(-2)}`;
+                                  }
+
+                                  // QUARTERLY
+                                  if (timeView === "quarterly") {
+                                    // If already formatted (e.g., "Q1 2024"), just display it
+                                    if (value.startsWith("Q")) {
+                                      return value;
+                                    }
+                                    // Handle "2024-Q1" format
+                                    const [year, q] = value.split("-Q").map(Number);
+                                    return `Q${q} ${year}`;
+                                  }
+
+                                  // YEARLY
+                                  if (timeView === "yearly") {
+                                    return value; // "2024" works as-is
+                                  }
+
+                                  return value;
+                                }}
+                              />
+                              <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
+                              <Tooltip content={<CustomTooltip />} />
+                              
+                              {hasEvents ? (
+                                <>
+                                  <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline" radius={[3, 3, 0, 0]} />
+                                  {scenarioGraph?.eventNames?.map((eventName, idx) => {
+                                    const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
+                                    return <Bar key={eventName} dataKey={eventName} stackId="events" fill={color} fillOpacity={0.8} name={eventName.split('_').slice(0, -1).join(' ')} radius={idx === scenarioGraph.eventNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />;
+                                  })}
+                                  <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Total" />
+                                </>
+                              ) : (
+                                <>
+                                  <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[3, 3, 0, 0]} />
+                                  <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Predicted" />
+                                </>
+                              )}
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                        
+                        {hasEvents ? (
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            {causalEvents.map((event) => {
+                              const eventKey = `${event.typeLabel}_${event.id}`;
+                              const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
+                              const Icon = getIconComponent(event.iconName);
+                              return (
+                                <div key={event.id} className="p-2 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Icon className="w-3 h-3" style={{ color: event.color }} />
+                                    <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">{event.typeLabel}</span>
+                                  </div>
+                                  <div className="text-sm font-bold" style={{ color: event.color }}>
+                                    {totalImpact > 0 ? '+' : ''}{Math.round(totalImpact).toLocaleString()}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                            <p className="text-xs text-blue-800 dark:text-blue-400">
+                              💡 Showing baseline forecast. Add events above to see their impact on sales.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {/* KPI Cards for Forecast */}
+                  {forecastPayload && displayData.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                        <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
+                        <div className="text-lg font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
+                      </div>
+                      
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                        <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Total Period</div>
+                        <div className="text-lg font-bold text-blue-900 dark:text-blue-300">{Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
+                      </div>
+                      
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                        <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Active Events</div>
+                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">{causalEvents.length}</div>
+                      </div>
+                      
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
+                        <div className="text-xs font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
+                        <div className="text-lg font-bold text-orange-900 dark:text-orange-300">
+                          {(() => {
+                            const totalPredicted = forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0);
+                            const totalBaseline = forecastData.reduce((sum, d) => sum + (d.baseline || 0), 0);
+                            const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
+                            return (impact > 0 ? '+' : '') + impact.toFixed(1);
+                          })()}%
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              </div>
+
+
+               {/* LEFT: Historical Sales */}
+                  <div className="flex-1 w-full lg:w-1/2">
+                    <Card className="p-6 h-full">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">📉 Historical Sales</h3>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">Actual performance trends</p>
+                      
+                      {displayData.some(d => d.actual !== null) ? (
+                        <>
+                          <div style={{ height: 320 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <XAxis
+                                  dataKey="ds"
+                                  stroke="#9CA3AF"
+                                  tick={{ fontSize: timeView === "daily" ? 10 : 11, fill: "#9CA3AF" }}
+                                  interval="preserveStartEnd"
+                                  angle={timeView === "daily" ? -45 : timeView === "weekly" ? -30 : 0}
+                                  textAnchor={timeView === "daily" || timeView === "weekly" ? "end" : "middle"}
+                                  height={65}
+                                  tickFormatter={(value) => {
+                                    // DAILY = already ISO dates → display directly
+                                    if (timeView === "daily") {
+                                      const d = new Date(value);
+                                      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                                    }
+
+                                    // WEEKLY
+                                    if (timeView === "weekly") {
+                                      // If already formatted (e.g., "W3 Apr 2023"), just display it
+                                      if (value.startsWith("W")) {
+                                        return value;
+                                      }
+                                      // Handle "2023-W03" format
+                                      const [year, week] = value.split("-W").map(Number);
+                                      const jan4 = new Date(year, 0, 4);
+                                      const monday = new Date(jan4);
+                                      monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (week - 1) * 7);
+                                      return monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                                    }
+
+                                    // MONTHLY
+                                    if (timeView === "monthly" && value.includes(" ")) {
+                                      const [month, year] = value.split(" ");
+                                      return `${month} '${year.slice(-2)}`;
+                                    }
+
+                                    // QUARTERLY
+                                    if (timeView === "quarterly") {
+                                      // If already formatted (e.g., "Q1 2024"), just display it
+                                      if (value.startsWith("Q")) {
+                                        return value;
+                                      }
+                                      // Handle "2024-Q1" format
+                                      const [year, q] = value.split("-Q").map(Number);
+                                      return `Q${q} ${year}`;
+                                    }
+
+                                    // YEARLY
+                                    if (timeView === "yearly") {
+                                      return value; // "2024" works as-is
+                                    }
+
+                                    return value;
+                                  }}
+                                />
+                                <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
+                                <Tooltip content={<CustomTooltip />} />
+                                {timeView === 'daily' || timeView === 'weekly' ? (
+                                  <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual" radius={[3, 3, 0, 0]} />
+                                ) : (
+                                  <>
+                                    <defs>
+                                      <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                                      </linearGradient>
+                                    </defs>
+                                    <Area type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} fill="url(#colorActual)" name="Actual" />
+                                  </>
+                                )}
+                              </ComposedChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* KPI Cards for Historical */}
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            {(() => {
+                              const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
+                              const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
+                              const avgSales = historicalData.length > 0 ? totalSales / historicalData.length : 0;
+                              const maxSales = historicalData.length > 0 ? Math.max(...historicalData.map(d => d.actual)) : 0;
+                              let growthRate = 0;
+                              if (historicalData.length >= 2) {
+                                const firstHalf = historicalData.slice(0, Math.floor(historicalData.length / 2));
+                                const secondHalf = historicalData.slice(Math.floor(historicalData.length / 2));
+                                const firstAvg = firstHalf.reduce((s, d) => s + d.actual, 0) / firstHalf.length;
+                                const secondAvg = secondHalf.reduce((s, d) => s + d.actual, 0) / secondHalf.length;
+                                growthRate = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg * 100) : 0;
+                              }
+                              
+                              return (
+                                <>
+                                  <div className="p-2 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
+                                    <div className="text-xs font-medium text-green-800 dark:text-green-400">Total</div>
+                                    <div className="text-sm font-bold text-green-900 dark:text-green-300">{Math.round(totalSales).toLocaleString()}</div>
+                                  </div>
+                                  <div className="p-2 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
+                                    <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Average</div>
+                                    <div className="text-sm font-bold text-blue-900 dark:text-blue-300">{Math.round(avgSales).toLocaleString()}</div>
+                                  </div>
+                                  <div className="p-2 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                                    <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Peak</div>
+                                    <div className="text-sm font-bold text-purple-900 dark:text-purple-300">{Math.round(maxSales).toLocaleString()}</div>
+                                  </div>
+                                  <div className={`p-2 rounded-lg border ${growthRate >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-800'}`}>
+                                    <div className={`text-xs font-medium ${growthRate >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-orange-800 dark:text-orange-400'}`}>Growth</div>
+                                    <div className={`text-sm font-bold ${growthRate >= 0 ? 'text-emerald-900 dark:text-emerald-300' : 'text-orange-900 dark:text-orange-300'}`}>
+                                      {growthRate > 0 ? '+' : ''}{growthRate.toFixed(1)}%
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+                          No historical data available
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+            </div>
+          )}
+
+           {/* SALES QUERY CARD */}
+            <Card className="p-6 box">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🔍 Sales Query</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Search exact sales for specific dates or periods</p>
+              </div>
+
+              <div className="space-y-4">
+
+
                   <div className="space-y-4">
                     {/* Query Type Selector */}
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -1440,359 +2012,12 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       </div>
                     )}
                   </div>
-                )}
+                </div>
               </Card>
-
-            <Card className="p-6 box col-span-1">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
-                <div>
-                  <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
-                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
-
-                 {/* File status with session indicator */}
-                  {file && (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-center text-xs text-gray-500 dark:text-gray-400">
-                        Current file: {file.name}
-                        {!isRealFile && (
-                            <span className="ml-2 px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">
-                              📁 Previous session (events editable)
-                            </span>
-                          )}
-                      </p>
-                      {causalEvents.length > 0 && (
-                        <p className="text-center text-xs text-green-600 dark:text-green-400">
-                          ✅ {causalEvents.length} event(s) saved - Will be preserved on new upload
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
-                    <Upload size={18} />
-                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
-                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
-                  </label>
-                </div>
-              </div>
-              {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
-              {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
-            </Card>
-            
-            <Card className="p-6 box col-span-2">
-
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Causal Events</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Plan and manage events that impact beverage sales</p>
-                </div>
-                <button 
-                  onClick={() => setShowEventModal(true)} 
-                  disabled={!file}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${!file ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} 
-                  style={{ backgroundColor: theme.chart }}
-                  title={!file ? 'Upload data first to add events' : 'Add a new causal event'}
-                >
-                  <Plus size={18} /><span>Add Event</span>
-                </button>
-              </div>
-              <div className="space-y-2">
-                {causalEvents.length === 0 ? (
-                  <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No causal events added yet. Click "Add Event" to start planning.</div>
-                ) : causalEvents.map(event => {
-                  const Icon = getIconComponent(event.iconName); // Use helper function to get icon
-                  return (
-                    <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 rounded-lg" style={{ backgroundColor: event.color + '20' }}>
-                          <Icon className="w-5 h-5" style={{ color: event.color }} />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">{event.typeLabel}</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {event.startDate} {event.endDate && `to ${event.endDate}`} • Impact: {event.impact > 0 ? '+' : ''}{event.impact}%
-                          </p>
-                          {event.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{event.description}</p>}
-                        </div>
-                      </div>
-                      <button onClick={() => handleRemoveEvent(event.id)} className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-                        <X className="w-4 h-4 text-red-600 dark:text-red-400" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-            </div>
-
-            
-            
-
-            {showEventModal && (
-              <>
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowEventModal(false)} />
-                <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-                  <Card className="w-full max-w-lg p-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Causal Event</h3>
-                      <button onClick={() => setShowEventModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Event Type</label>
-                        <select value={newEvent.type} onChange={(e) => {
-                          const selected = eventTypes.find(t => t.value === e.target.value);
-                          setNewEvent({ ...newEvent, type: e.target.value, impact: selected?.impact || 0 });
-                        }} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white">
-                          {eventTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
-                          <input type="date" value={newEvent.startDate} onChange={(e) => setNewEvent({...newEvent, startDate: e.target.value})} min={forecastLimits.minDate || today} max={forecastLimits.maxDate || undefined} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date (Optional)</label>
-                          <input type="date" value={newEvent.endDate} onChange={(e) => setNewEvent({...newEvent, endDate: e.target.value})} min={newEvent.startDate || forecastLimits.minDate || today} max={forecastLimits.maxDate || undefined} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Impact (%)</label>
-                        <input type="number" value={newEvent.impact} onChange={(e) => setNewEvent({...newEvent, impact: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" placeholder="e.g., 25 for +25% or -15 for -15%" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description (Optional)</label>
-                        <textarea value={newEvent.description} onChange={(e) => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white" rows={3} placeholder="Additional notes about this event..." />
-                      </div>
-                      <button onClick={handleAddEvent} disabled={isLoading} className="w-full py-2 rounded-xl text-white font-medium transition-all hover:scale-[1.02] disabled:opacity-50" style={{ backgroundColor: theme.chart }}>
-                        {isLoading ? 'Adding Event...' : 'Add Event'}
-                      </button>
-                    </div>
-                  </Card>
-                </div>
-              </>
-            )}
-
-
-
-            {/* Row 1: Two Charts Side by Side - FLEXBOX VERSION */}
-              {displayData.length > 0 && (
-                <div className="flex flex-col lg:flex-row gap-6 mb-6">
-                
-              {/* RIGHT: Forecast Event Impact */}
-              <div className="flex-1 w-full lg:w-1/2">
-                <Card className="p-6 h-full">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">📈 Forecast Event Impact</h2>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].map(view => (
-                        <button 
-                          key={view} 
-                          onClick={() => setTimeView(view)} 
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                            timeView === view 
-                              ? 'text-white shadow-lg scale-105' 
-                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                          }`} 
-                          style={timeView === view ? { backgroundColor: theme.chart } : {}}
-                        >
-                          {view.charAt(0).toUpperCase() + view.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {(() => {
-                    const hasEvents = causalEvents.length > 0;
-                    const chartData = hasEvents ? forecastData : displayData.filter(d => d.predicted !== null);
-                    
-                    return (
-                      <>
-                        <div style={{ height: 320 }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#4c5b74ff" opacity={0.1} />
-                              <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
-                              <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
-                              <Tooltip content={<CustomTooltip />} />
-                              
-                              {hasEvents ? (
-                                <>
-                                  <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline" radius={[3, 3, 0, 0]} />
-                                  {scenarioGraph?.eventNames?.map((eventName, idx) => {
-                                    const color = eventColors[eventName] || `hsl(${idx * 60}, 70%, 60%)`;
-                                    return <Bar key={eventName} dataKey={eventName} stackId="events" fill={color} fillOpacity={0.8} name={eventName.split('_').slice(0, -1).join(' ')} radius={idx === scenarioGraph.eventNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />;
-                                  })}
-                                  <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Total" />
-                                </>
-                              ) : (
-                                <>
-                                  <Bar dataKey="baseline" fill="#9CA3AF" fillOpacity={0.4} name="Baseline Forecast" radius={[3, 3, 0, 0]} />
-                                  <Line type="monotone" dataKey="predicted" stroke={theme.chart} strokeWidth={2} dot={false} name="Predicted" />
-                                </>
-                              )}
-                            </ComposedChart>
-                          </ResponsiveContainer>
-                        </div>
-                        
-                        {hasEvents ? (
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            {causalEvents.map((event) => {
-                              const eventKey = `${event.typeLabel}_${event.id}`;
-                              const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
-                              const Icon = getIconComponent(event.iconName);
-                              return (
-                                <div key={event.id} className="p-2 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
-                                  <div className="flex items-center gap-1 mb-1">
-                                    <Icon className="w-3 h-3" style={{ color: event.color }} />
-                                    <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">{event.typeLabel}</span>
-                                  </div>
-                                  <div className="text-sm font-bold" style={{ color: event.color }}>
-                                    {totalImpact > 0 ? '+' : ''}{Math.round(totalImpact).toLocaleString()}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                            <p className="text-xs text-blue-800 dark:text-blue-400">
-                              💡 Showing baseline forecast. Add events above to see their impact on sales.
-                            </p>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-
-                  {/* KPI Cards for Forecast */}
-                  {forecastPayload && displayData.length > 0 && (
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-                        <div className="text-xs font-medium text-green-800 dark:text-green-400">Avg Sales</div>
-                        <div className="text-lg font-bold text-green-900 dark:text-green-300">{avgPredicted.toLocaleString()}</div>
-                      </div>
-                      
-                      <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
-                        <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Total Period</div>
-                        <div className="text-lg font-bold text-blue-900 dark:text-blue-300">{Math.round(forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0)).toLocaleString()}</div>
-                      </div>
-                      
-                      <div className="p-3 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
-                        <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Active Events</div>
-                        <div className="text-lg font-bold text-purple-900 dark:text-purple-300">{causalEvents.length}</div>
-                      </div>
-                      
-                      <div className="p-3 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-800">
-                        <div className="text-xs font-medium text-orange-800 dark:text-orange-400">Total Impact</div>
-                        <div className="text-lg font-bold text-orange-900 dark:text-orange-300">
-                          {(() => {
-                            const totalPredicted = forecastData.reduce((sum, d) => sum + (d.predicted || 0), 0);
-                            const totalBaseline = forecastData.reduce((sum, d) => sum + (d.baseline || 0), 0);
-                            const impact = totalBaseline > 0 ? ((totalPredicted - totalBaseline) / totalBaseline * 100) : 0;
-                            return (impact > 0 ? '+' : '') + impact.toFixed(1);
-                          })()}%
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              </div>
-
-
-               {/* LEFT: Historical Sales */}
-                  <div className="flex-1 w-full lg:w-1/2">
-                    <Card className="p-6 h-full">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">📉 Historical Sales</h3>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">Actual performance trends</p>
-                      
-                      {displayData.some(d => d.actual !== null) ? (
-                        <>
-                          <div style={{ height: 320 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={displayData.filter(d => d.actual !== null)} margin={{ top: 5, right: 5, left: 0, bottom: 40 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                                <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
-                                <YAxis stroke="#9CA3AF" tick={{ fontSize: 9 }} width={50} />
-                                <Tooltip content={<CustomTooltip />} />
-                                {timeView === 'daily' || timeView === 'weekly' ? (
-                                  <Bar dataKey="actual" fill="#10B981" fillOpacity={0.8} name="Actual" radius={[3, 3, 0, 0]} />
-                                ) : (
-                                  <>
-                                    <defs>
-                                      <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
-                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
-                                      </linearGradient>
-                                    </defs>
-                                    <Area type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} fill="url(#colorActual)" name="Actual" />
-                                  </>
-                                )}
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          </div>
-
-                          {/* KPI Cards for Historical */}
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            {(() => {
-                              const historicalData = displayData.filter(d => d.actual !== null && d.actual > 0);
-                              const totalSales = historicalData.reduce((sum, d) => sum + d.actual, 0);
-                              const avgSales = historicalData.length > 0 ? totalSales / historicalData.length : 0;
-                              const maxSales = historicalData.length > 0 ? Math.max(...historicalData.map(d => d.actual)) : 0;
-                              let growthRate = 0;
-                              if (historicalData.length >= 2) {
-                                const firstHalf = historicalData.slice(0, Math.floor(historicalData.length / 2));
-                                const secondHalf = historicalData.slice(Math.floor(historicalData.length / 2));
-                                const firstAvg = firstHalf.reduce((s, d) => s + d.actual, 0) / firstHalf.length;
-                                const secondAvg = secondHalf.reduce((s, d) => s + d.actual, 0) / secondHalf.length;
-                                growthRate = firstAvg > 0 ? ((secondAvg - firstAvg) / firstAvg * 100) : 0;
-                              }
-                              
-                              return (
-                                <>
-                                  <div className="p-2 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
-                                    <div className="text-xs font-medium text-green-800 dark:text-green-400">Total</div>
-                                    <div className="text-sm font-bold text-green-900 dark:text-green-300">{Math.round(totalSales).toLocaleString()}</div>
-                                  </div>
-                                  <div className="p-2 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
-                                    <div className="text-xs font-medium text-blue-800 dark:text-blue-400">Average</div>
-                                    <div className="text-sm font-bold text-blue-900 dark:text-blue-300">{Math.round(avgSales).toLocaleString()}</div>
-                                  </div>
-                                  <div className="p-2 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
-                                    <div className="text-xs font-medium text-purple-800 dark:text-purple-400">Peak</div>
-                                    <div className="text-sm font-bold text-purple-900 dark:text-purple-300">{Math.round(maxSales).toLocaleString()}</div>
-                                  </div>
-                                  <div className={`p-2 rounded-lg border ${growthRate >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-800'}`}>
-                                    <div className={`text-xs font-medium ${growthRate >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-orange-800 dark:text-orange-400'}`}>Growth</div>
-                                    <div className={`text-sm font-bold ${growthRate >= 0 ? 'text-emerald-900 dark:text-emerald-300' : 'text-orange-900 dark:text-orange-300'}`}>
-                                      {growthRate > 0 ? '+' : ''}{growthRate.toFixed(1)}%
-                                    </div>
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex items-center justify-center h-64 text-gray-500 dark:text-gray-400">
-                          No historical data available
-                        </div>
-                      )}
-                    </Card>
-                  </div>
-              
-            </div>
-          )}
 
 
                   {storeAnalytics && (
-                  <Card className="p-6 col-span-3">
+                  <Card className="p-6 col-span-3 mt-6 mb-6">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📊 Store-Level Analytics</h3>
                       <div className="space-y-6">
                         <div>
@@ -1813,244 +2038,12 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                         </div>
                       </div>
 
-                    {storeAnalytics.store_demand_patterns && (
-                      <div>
-                        <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Peak Demand Days by Store</h4>
-                        <div className="space-y-2 max-h-64 overflow-y-auto">
-                          {Object.entries(storeAnalytics.store_demand_patterns).slice(0, 5).map(([store, days], idx) => (
-                            <div key={idx} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                              <div className="font-semibold text-gray-900 dark:text-white mb-2">{store}</div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                                {days.slice(0, 3).map((day, dayIdx) => (
-                                  <div key={dayIdx}>• {day.DATE}: {day.total.toLocaleString()} units</div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                   
                 </Card>
                 )}
    
-                
-
             
-                
-
-                {/* Row 4: Analytics Cards in 2x2 Grid */}
-                <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-[50%_50%] gap-6">
-                  
-                  {/* Category Analysis - ENHANCED VERSION */}
-                  {categoryAnalysis && (
-                    <Card className="p-6">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📦 Product Analysis</h3>
-                      
-                      {/* Top SKU Banner */}
-                      {categoryAnalysis.top_sku && (
-                        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-2 border-yellow-300 dark:border-yellow-700">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="text-xs font-medium text-yellow-800 dark:text-yellow-400">🏆 Top Selling SKU</div>
-                              <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-300 mt-1">
-                                {categoryAnalysis.top_sku.sku}
-                              </div>
-                              <div className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
-                                {categoryAnalysis.top_sku.brand} • {categoryAnalysis.top_sku.units.toLocaleString()} units
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xs text-yellow-700 dark:text-yellow-400">Revenue</div>
-                              <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-300">
-                                ₱{categoryAnalysis.top_sku.revenue.toLocaleString()}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="space-y-6">
-                        {/* By Brand */}
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sales by Brand</h4>
-                          <div className="space-y-2">
-                            {categoryAnalysis.brands?.slice(0, 7).map((brand, idx) => {
-                              const total = categoryAnalysis.brands.reduce((sum, b) => sum + b.sales, 0);
-                              const percentage = ((brand.sales / total) * 100).toFixed(1);
-                              return (
-                                <div key={idx} className="space-y-1">
-                                  <div className="flex justify-between text-xs">
-                                    <span className="font-medium text-gray-700 dark:text-gray-300">{brand.brand}</span>
-                                    <span className="font-semibold" style={{ color: theme.chart }}>
-                                      {brand.sales.toLocaleString()} units ({percentage}%)
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                                    <div 
-                                      className="h-1.5 rounded-full transition-all duration-500" 
-                                      style={{ width: `${percentage}%`, backgroundColor: theme.chart }} 
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* By Bottle Size */}
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sales by Bottle Size</h4>
-                          <div className="space-y-2">
-                            {categoryAnalysis.bottle_sizes?.slice(0, 6).map((size, idx) => {
-                              const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
-                              const percentage = ((size.sales / total) * 100).toFixed(1);
-                              return (
-                                <div key={idx} className="space-y-1">
-                                  <div className="flex justify-between text-xs">
-                                    <span className="font-medium text-gray-700 dark:text-gray-300">{size.size}</span>
-                                    <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                      {size.sales.toLocaleString()} units ({percentage}%)
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                                    <div 
-                                      className="h-1.5 rounded-full transition-all duration-500 bg-blue-500" 
-                                      style={{ width: `${percentage}%` }} 
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* SKU Details Table - Collapsible */}
-                        <CollapsibleSection title="Detailed SKU Breakdown" defaultOpen={false}>
-                          <div className="overflow-x-auto max-h-96">
-                            <table className="w-full text-xs">
-                              <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
-                                <tr>
-                                  <th className="px-3 py-2 text-left font-semibold">SKU</th>
-                                  <th className="px-3 py-2 text-left font-semibold">Brand</th>
-                                  <th className="px-3 py-2 text-left font-semibold">Size</th> {/* ⭐ NEW COLUMN */}
-                                  <th className="px-3 py-2 text-right font-semibold">Cases</th>
-                                  <th className="px-3 py-2 text-right font-semibold">Units</th>
-                                  <th className="px-3 py-2 text-right font-semibold">Revenue</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {categoryAnalysis.sku_details?.map((sku, idx) => (
-                                  <tr key={idx} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                                    <td className="px-3 py-2 font-medium">{sku.sku}</td>
-                                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{sku.brand}</td>
-                                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
-                                      <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 text-xs font-medium">
-                                        {sku.bottle_size}
-                                      </span>
-                                    </td> {/* ⭐ NEW CELL */}
-                                    <td className="px-3 py-2 text-right">{sku.cases.toLocaleString()}</td>
-                                    <td className="px-3 py-2 text-right font-semibold">{sku.units.toLocaleString()}</td>
-                                    <td className="px-3 py-2 text-right font-bold text-green-600 dark:text-green-400">
-                                      ₱{sku.revenue.toLocaleString()}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </CollapsibleSection>
-
-                        {/* Summary Stats */}
-                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                          <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                            <div className="text-xs text-green-700 dark:text-green-400">Total Revenue</div>
-                            <div className="text-lg font-bold text-green-900 dark:text-green-300">
-                              ₱{categoryAnalysis.total_revenue?.toLocaleString()}
-                            </div>
-                          </div>
-                          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                            <div className="text-xs text-blue-700 dark:text-blue-400">Total SKUs</div>
-                            <div className="text-lg font-bold text-blue-900 dark:text-blue-300">
-                              {categoryAnalysis.total_skus}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Causal Factors */}
-                  {causalFactorAnalysis && causalFactorAnalysis.factors && causalFactorAnalysis.factors.length > 0 && (
-                    <Card className="p-6">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">🔍 Causal Factors</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {causalFactorAnalysis.factors.slice(0, 4).map((f, idx) => (
-                          <div key={idx} className={`p-3 rounded-lg border-2 ${f.impact >= 0 ? 'border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20' : 'border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20'}`}>
-                            <div className={`text-xs font-medium mb-1 truncate ${f.impact >= 0 ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>{f.factor}</div>
-                            <div className={`text-lg font-bold ${f.impact >= 0 ? 'text-green-900 dark:text-green-300' : 'text-red-900 dark:text-red-300'}`}>
-                              {f.impact > 0 ? '+' : ''}{f.impact.toFixed(1)}%
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Store Analytics */}
-                  {storeAnalytics && (
-                    <Card className="p-6">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📊 Top Stores</h3>
-                      <div className="space-y-2">
-                        {storeAnalytics.top_buyers?.slice(0, 5).map((store, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400">#{idx + 1}</span>
-                              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{store.name}</span>
-                            </div>
-                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{store.sales.toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Full Reports */}
-                  {fullReports && (
-                    <Card className="p-6">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📈 Sales Reports</h3>
-                      
-                      {fullReports.monthly && fullReports.monthly.length > 0 && (
-                        <div className="mb-4">
-                          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Recent Months</h4>
-                          <div className="grid grid-cols-3 gap-2">
-                            {fullReports.monthly.slice(-3).map((m, idx) => (
-                              <div key={idx} className="p-2 rounded-lg border bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
-                                <div className="text-xs font-medium text-purple-800 dark:text-purple-400 truncate">{m.month}</div>
-                                <div className="text-sm font-bold text-purple-900 dark:text-purple-300">{m.total_sales.toLocaleString()}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {fullReports.yearly && fullReports.yearly.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Yearly Overview</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {fullReports.yearly.map((y, idx) => (
-                              <div key={idx} className="p-2 rounded-lg border-2 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800">
-                                <div className="text-xs font-medium text-amber-800 dark:text-amber-400">{y.year}</div>
-                                <div className="text-sm font-bold text-amber-900 dark:text-amber-300">{y.total_sales.toLocaleString()}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </Card>
-                  )}
-                </div>
               </div>
            
           {/* Decision Support System - AI-Powered Insights */}
@@ -2160,66 +2153,11 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </Card>
             )}
 
-            {/* Category & Bottle Size Analysis */}
-            {categoryAnalysis && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  📦 Product Category & Bottle Size Analysis
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Categories */}
-                  <div>
-                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Sales by Category</h4>
-                    <div className="space-y-3">
-                      {categoryAnalysis.categories?.map((cat, idx) => {
-                        const total = categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0);
-                        const percentage = ((cat.sales / total) * 100).toFixed(1);
-                        return (
-                          <div key={idx} className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-medium text-gray-700 dark:text-gray-300">{cat.category}</span>
-                              <span className="font-semibold" style={{ color: theme.chart }}>{cat.sales.toLocaleString()} ({percentage}%)</span>
-                            </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                              <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${percentage}%`, backgroundColor: theme.chart }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Bottle Sizes */}
-                  <div>
-                    <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Sales by Bottle Size</h4>
-                    <div className="space-y-3">
-                      {categoryAnalysis.bottle_sizes?.map((size, idx) => {
-                        const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
-                        const percentage = ((size.sales / total) * 100).toFixed(1);
-                        return (
-                          <div key={idx} className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-medium text-gray-700 dark:text-gray-300">{size.size}</span>
-                              <span className="font-semibold text-blue-600 dark:text-blue-400">{size.sales.toLocaleString()} ({percentage}%)</span>
-                            </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                              <div className="h-2 rounded-full transition-all duration-500 bg-blue-500" style={{ width: `${percentage}%` }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                  Total SKUs analyzed: {categoryAnalysis.total_skus}
-                </div>
-              </Card>
-            )}
+          
 
             {/* Store Demand Causes */}
             {storeDemandCauses && storeDemandCauses.causes && storeDemandCauses.causes.length > 0 && (
-              <Card className="p-6">
+              <Card className="p-6 mt">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   🏪 Store Demand Analysis & Root Causes
                 </h3>

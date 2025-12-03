@@ -845,51 +845,41 @@ def decision_support():
             }
         
         # Prepare prompt for Gemini
-        prompt = f"""As a beverage distribution business analyst, provide strategic insights and recommendations based on this data:
+        prompt = f"""You are a beverage business analyst. Give me clear, simple decision based on this data.
 
-SALES OVERVIEW:
+Sales Overview:
 - Total Sales: {int(total_sales):,} units
-- Average Daily Sales: {int(avg_daily):,} units
-- Volatility (CV): {cv:.2%}
-- Trend: {trend:+.1f}% ({"growing" if trend > 0 else "declining"})
-- Date Range: {prophet_df['ds'].min().date()} to {prophet_df['ds'].max().date()}
+- Daily Average: {int(avg_daily):,} units
+- Sales Stability: {"Stable" if cv < 0.3 else "Variable" if cv < 0.5 else "Very unpredictable"}
+- Trend: {"Growing" if trend > 0 else "Declining"} by {abs(trend):.1f}%
+- Period: {prophet_df['ds'].min().date()} to {prophet_df['ds'].max().date()}
 
-SEASONAL PATTERNS:
-- Peak Month: {calendar.month_abbr[peak_month]} ({int(monthly_avg[peak_month]):,} avg units)
-- Lowest Month: {calendar.month_abbr[low_month]} ({int(monthly_avg[low_month]):,} avg units)
+Seasonal Patterns:
+- Best Month: {calendar.month_abbr[peak_month]} with {int(monthly_avg[peak_month]):,} units average
+- Slowest Month: {calendar.month_abbr[low_month]} with {int(monthly_avg[low_month]):,} units average
 
-{"STORE PERFORMANCE:" if store_metrics else ""}
-{f"- Top Performing Store: {store_metrics.get('top_store', 'N/A')} ({int(store_metrics.get('top_store_sales', 0)):,} units)" if store_metrics else ""}
+{"Store Performance:" if store_metrics else ""}
+{f"- Top Store: {store_metrics.get('top_store', 'N/A')} with {int(store_metrics.get('top_store_sales', 0)):,} units" if store_metrics else ""}
 {f"- Total Stores: {store_metrics.get('total_stores', 0)}" if store_metrics else ""}
 
-Provide a comprehensive decision support report with:
+Give me a simple report with these sections. Use plain language.
 
-1. **EXPANSION RECOMMENDATIONS**
-   - Which regions/stores to prioritize for growth
-   - New market opportunities
-   - Resource allocation strategy
+1. Where to expand
+Tell me which stores or areas to grow. Be specific about which stores need more product or support.
 
-2. **STOCKING STRATEGY**
-   - Optimal inventory levels by season
-   - Safety stock recommendations
-   - When to increase/decrease stock
+2. How to manage inventory
+When to stock more, when to stock less. Give me the months and amounts.
 
-3. **RISK ASSESSMENT**
-   - Potential stockout periods
-   - Demand volatility concerns
-   - Store-specific risks
+3. What could go wrong
+Tell me the risks. When might we run out of stock? Which stores are struggling?
 
-4. **ACTIONABLE INSIGHTS**
-   - Top 5 immediate actions
-   - Short-term priorities (next 30 days)
-   - Long-term strategic moves (6-12 months)
+4. Top 5 things to do now
+List 5 specific actions to take this month. Make them practical and clear.
 
-5. **STORE PRIORITIZATION**
-   - Which stores need attention
-   - High-potential stores for investment
-   - Underperforming stores requiring support
+5. Which stores need attention
+Which stores should we focus on and why? Which ones need help?
 
-Format with clear headers, bullet points, and specific numbers/percentages."""
+Keep it short and clear. No fancy formatting or business jargon. Prevent using ** in the output or extras"""
 
         # Call Gemini API
         headers = {"Content-Type": "application/json"}
@@ -945,6 +935,7 @@ Format with clear headers, bullet points, and specific numbers/percentages."""
         print(f"Decision support error: {e}")
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 400
+    
 
 
 def generate_fallback_insights(total_sales, avg_daily, trend, cv, monthly_avg, store_metrics):
@@ -1210,101 +1201,6 @@ import json
 GEMINI_API_KEY = "AIzaSyDls9Ny2ciONGXc-QC5QI1o77eXtaWGydE"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
-@app.route("/full-report", methods=["POST"])
-def full_report():
-    try:
-        if "file" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
-
-        file = request.files["file"]
-        df = pd.read_csv(file, dtype=str, keep_default_na=False, na_values=[''])
-        
-        # Clean and process data
-        if df.shape[1] >= 2:
-            second_col = df.columns[1]
-            mask_header = (df[second_col].astype(str).str.strip().str.upper() == "OUTLET") | \
-                         (df.iloc[:, 0].astype(str).str.strip().str.upper() == "DATE")
-            df = df.loc[~mask_header].reset_index(drop=True)
-        
-        prophet_df = detect_format_and_process(df)
-        
-        # Generate comprehensive summary
-        total_sales = prophet_df['y'].sum()
-        avg_daily = prophet_df['y'].mean()
-        peak_sales = prophet_df['y'].max()
-        
-        prophet_df['month'] = prophet_df['ds'].dt.month
-        monthly_avg = prophet_df.groupby('month')['y'].mean().to_dict()
-        
-        summary = {
-            "total_sales": int(total_sales),
-            "average_daily_sales": int(avg_daily),
-            "peak_sales": int(peak_sales),
-            "monthly_averages": {calendar.month_abbr[k]: int(v) for k, v in monthly_avg.items()},
-            "date_range": f"{prophet_df['ds'].min().date()} to {prophet_df['ds'].max().date()}"
-        }
-        
-        prompt = f"""Analyze this beverage sales data and provide strategic insights:
-
-Sales Summary:
-
--Provide a SHORT/STRAIGHT TO THE POINT summary output 
-- Total Sales: {summary['total_sales']:,} units
-- Average Daily Sales: {summary['average_daily_sales']:,} units
-- Peak Sales Day: {summary['peak_sales']:,} units
-- Date Range: {summary['date_range']}
-
-Monthly Averages:
-{json.dumps(summary['monthly_averages'], indent=2)}
-
-Provide a comprehensive report with:
-1. Sales Performance Analysis: Key trends and patterns
-2. Seasonal Insights: Best and worst performing months
-3. Store Expansion Recommendations: Which stores to prioritize based on sales
-4. Inventory Stocking Strategy: Optimal stock levels for different periods
-5. Risk Assessment: Potential stockout periods
-6. Action Items: Top 3 immediate actions to improve sales
-
-Format the response in clear sections with bullet points.
--MAKE IT SHORT/STRAIGHT TO THE POINT summary output """
-
-        # Correct Gemini API format
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [{
-                    "text": prompt
-                }]
-            }],
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": 2048,
-                "topP": 0.95,
-                "topK": 40
-            }
-        }
-
-        url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
-        resp = requests.post(url_with_key, headers=headers, json=payload, timeout=30)
-        
-        if resp.status_code != 200:
-            return jsonify({"error": "Gemini API call failed", "details": resp.text}), 500
-        
-        result = resp.json()
-        generated_text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
-        
-        return jsonify({
-            "full_report": generated_text,
-            "summary_data": summary,
-            "generated_by": "Gemini 2.5 Flash"
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"Full report error: {e}")
-        print(traceback.format_exc())
-        return jsonify({"error": str(e)}), 400
-    
 @app.route("/category-analysis", methods=["POST"])
 def category_analysis():
     try:
@@ -2076,6 +1972,8 @@ def sku_pricing():
             "avg_case_price": sum(CASE_PRICES.values()) / len(CASE_PRICES)
         }
     })
+
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

@@ -552,11 +552,15 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     
     setFile(f);
     setIsRealFile(true);
-    // RESET EVENTS when new file is uploaded
-    setCausalEvents([]);
     
-    // Run causal forecast with empty events
-    await runForecastWithEvents(f, []);
+    // ⭐ KEEP EXISTING EVENTS - Don't reset them
+    // OLD CODE: setCausalEvents([]);
+    
+    // ⭐ Get forecast date range to validate events
+    setUploadStatus('Analyzing new file...');
+    
+    // Run causal forecast with EXISTING events
+    await runForecastWithEvents(f, causalEvents);
 
     const forecastForm = new FormData();
     forecastForm.append('file', f);
@@ -583,15 +587,19 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       if (results[1]) setCausalFactorAnalysis(results[1]);
       if (results[2]) setFullReports(results[2]);
       
-      // Save with the results we just fetched AND RESET EVENTS
+      // ⭐ NEW: Validate and adjust events after getting new data range
       setTimeout(async () => {
+        const adjustedEvents = await validateAndAdjustEvents(causalEvents, scenarioGraph);
+        setCausalEvents(adjustedEvents);
+        
+        // Save with ADJUSTED events (not empty)
         if (currentUser) {
           await saveCurrentStateToFirestore(currentUser.uid, f.name, {
             scenarioGraph: scenarioGraph,
             forecastPayload: forecastPayload,
             decisions: decisions,
             featureImportance: featureImportance,
-            causalEvents: [], // EMPTY EVENTS for new file
+            causalEvents: adjustedEvents, // ⭐ SAVE ADJUSTED EVENTS
             storeAnalytics: results[0],
             causalFactorAnalysis: results[1],
             fullReports: results[2],
@@ -599,6 +607,29 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             categoryAnalysis: categoryAnalysis,
             storeDemandCauses: storeDemandCauses
           });
+          
+          // ⭐ Re-run forecast with adjusted events
+          if (adjustedEvents.length > 0) {
+            setUploadStatus('Adjusting events to new data range...');
+            await runForecastWithEvents(f, adjustedEvents);
+            
+            // Save again with updated forecast
+            setTimeout(async () => {
+              await saveCurrentStateToFirestore(currentUser.uid, f.name, {
+                scenarioGraph,
+                forecastPayload,
+                decisions,
+                featureImportance,
+                causalEvents: adjustedEvents,
+                storeAnalytics: results[0],
+                causalFactorAnalysis: results[1],
+                fullReports: results[2],
+                decisionSupport: decisionSupport,
+                categoryAnalysis: categoryAnalysis,
+                storeDemandCauses: storeDemandCauses
+              });
+            }, 1000);
+          }
         }
       }, 2000);
     } catch (err) {
@@ -607,12 +638,73 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
   };
 
+  const validateAndAdjustEvents = async (existingEvents, newScenarioGraph) => {
+    if (!existingEvents || existingEvents.length === 0) return [];
+    if (!newScenarioGraph?.rows?.length) return existingEvents;
+    
+    // Get new forecast date range
+    const forecastRows = newScenarioGraph.rows.filter(row => 
+      row.predicted !== null && row.predicted !== undefined && row.predicted > 0
+    );
+    
+    if (!forecastRows.length) return existingEvents;
+    
+    const minDate = new Date(forecastRows[0].ds.split('T')[0]);
+    const maxDate = new Date(forecastRows[forecastRows.length - 1].ds.split('T')[0]);
+    
+    console.log(`📅 New data range: ${minDate.toISOString().split('T')[0]} to ${maxDate.toISOString().split('T')[0]}`);
+    
+    const adjustedEvents = existingEvents.map(event => {
+      const eventStart = new Date(event.startDate);
+      const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
+      
+      // Check if event is outside new range
+      if (eventStart < minDate || eventStart > maxDate) {
+        console.log(`⚠️ Event "${event.typeLabel}" is outside new range, adjusting...`);
+        
+        // Calculate event duration
+        const durationDays = Math.ceil((eventEnd - eventStart) / (1000 * 60 * 60 * 24));
+        
+        // Move event to start at minDate
+        const newStartDate = new Date(minDate);
+        const newEndDate = new Date(minDate);
+        newEndDate.setDate(newEndDate.getDate() + durationDays);
+        
+        // Ensure end date doesn't exceed maxDate
+        if (newEndDate > maxDate) {
+          newEndDate.setTime(maxDate.getTime());
+        }
+        
+        return {
+          ...event,
+          startDate: newStartDate.toISOString().split('T')[0],
+          endDate: durationDays > 0 ? newEndDate.toISOString().split('T')[0] : ''
+        };
+      }
+      
+      // Event is within range, keep as is
+      return event;
+    });
+    
+    // Show notification of adjustments
+    const adjustedCount = adjustedEvents.filter((e, i) => 
+      e.startDate !== existingEvents[i].startDate
+    ).length;
+    
+    if (adjustedCount > 0) {
+      setUploadStatus(`✅ ${adjustedCount} event(s) adjusted to new data range`);
+      setTimeout(() => setUploadStatus(''), 3000);
+    }
+    
+    return adjustedEvents;
+  };
+
   const handleAddEvent = async () => {
     if (!newEvent.startDate) return alert('Please select a start date');
     
     // CHECK IF FILE IS REAL
     if (!isRealFile) {
-      alert('Please upload a new file to add events. The current file data is from a previous session.');
+      alert('⚠️ Upload a new file to add events.\n\nCurrent data is from a previous session. Events will be preserved when you upload new data.');
       return;
     }
     
@@ -1439,14 +1531,21 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
                  {/* File status with session indicator */}
                   {file && (
-                    <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Current file: {file.name}
-                      {!isRealFile && (
-                        <span className="ml-2 px-2 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400">
-                          📁 Loaded from previous session
-                        </span>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                        Current file: {file.name}
+                        {!isRealFile && (
+                          <span className="ml-2 px-2 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400">
+                            📁 From previous session
+                          </span>
+                        )}
+                      </p>
+                      {causalEvents.length > 0 && (
+                        <p className="text-center text-xs text-green-600 dark:text-green-400">
+                          ✅ {causalEvents.length} event(s) saved - Will be preserved on new upload
+                        </p>
                       )}
-                    </p>
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -1871,26 +1970,55 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 {/* Row 4: Analytics Cards in 2x2 Grid */}
                 <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-[50%_50%] gap-6">
                   
-                  {/* Category Analysis */}
+                  {/* Category Analysis - ENHANCED VERSION */}
                   {categoryAnalysis && (
                     <Card className="p-6">
                       <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📦 Product Analysis</h3>
                       
-                      <div className="space-y-4">
+                      {/* Top SKU Banner */}
+                      {categoryAnalysis.top_sku && (
+                        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-2 border-yellow-300 dark:border-yellow-700">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs font-medium text-yellow-800 dark:text-yellow-400">🏆 Top Selling SKU</div>
+                              <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-300 mt-1">
+                                {categoryAnalysis.top_sku.sku}
+                              </div>
+                              <div className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                                {categoryAnalysis.top_sku.brand} • {categoryAnalysis.top_sku.units.toLocaleString()} units
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-yellow-700 dark:text-yellow-400">Revenue</div>
+                              <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-300">
+                                ₱{categoryAnalysis.top_sku.revenue.toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="space-y-6">
+                        {/* By Brand */}
                         <div>
-                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">By Category</h4>
+                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sales by Brand</h4>
                           <div className="space-y-2">
-                            {categoryAnalysis.categories?.slice(0, 4).map((cat, idx) => {
-                              const total = categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0);
-                              const percentage = ((cat.sales / total) * 100).toFixed(1);
+                            {categoryAnalysis.brands?.slice(0, 7).map((brand, idx) => {
+                              const total = categoryAnalysis.brands.reduce((sum, b) => sum + b.sales, 0);
+                              const percentage = ((brand.sales / total) * 100).toFixed(1);
                               return (
                                 <div key={idx} className="space-y-1">
                                   <div className="flex justify-between text-xs">
-                                    <span className="font-medium text-gray-700 dark:text-gray-300">{cat.category}</span>
-                                    <span className="font-semibold" style={{ color: theme.chart }}>{percentage}%</span>
+                                    <span className="font-medium text-gray-700 dark:text-gray-300">{brand.brand}</span>
+                                    <span className="font-semibold" style={{ color: theme.chart }}>
+                                      {brand.sales.toLocaleString()} units ({percentage}%)
+                                    </span>
                                   </div>
                                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                                    <div className="h-1.5 rounded-full transition-all duration-500" style={{ width: `${percentage}%`, backgroundColor: theme.chart }} />
+                                    <div 
+                                      className="h-1.5 rounded-full transition-all duration-500" 
+                                      style={{ width: `${percentage}%`, backgroundColor: theme.chart }} 
+                                    />
                                   </div>
                                 </div>
                               );
@@ -1898,24 +2026,82 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                           </div>
                         </div>
 
+                        {/* By Bottle Size */}
                         <div>
-                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">By Bottle Size</h4>
+                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sales by Bottle Size</h4>
                           <div className="space-y-2">
-                            {categoryAnalysis.bottle_sizes?.slice(0, 4).map((size, idx) => {
+                            {categoryAnalysis.bottle_sizes?.slice(0, 6).map((size, idx) => {
                               const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
                               const percentage = ((size.sales / total) * 100).toFixed(1);
                               return (
                                 <div key={idx} className="space-y-1">
                                   <div className="flex justify-between text-xs">
                                     <span className="font-medium text-gray-700 dark:text-gray-300">{size.size}</span>
-                                    <span className="font-semibold text-blue-600 dark:text-blue-400">{percentage}%</span>
+                                    <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                      {size.sales.toLocaleString()} units ({percentage}%)
+                                    </span>
                                   </div>
                                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                                    <div className="h-1.5 rounded-full transition-all duration-500 bg-blue-500" style={{ width: `${percentage}%` }} />
+                                    <div 
+                                      className="h-1.5 rounded-full transition-all duration-500 bg-blue-500" 
+                                      style={{ width: `${percentage}%` }} 
+                                    />
                                   </div>
                                 </div>
                               );
                             })}
+                          </div>
+                        </div>
+
+                        {/* SKU Details Table - Collapsible */}
+                        <CollapsibleSection title="Detailed SKU Breakdown" defaultOpen={false}>
+                          <div className="overflow-x-auto max-h-96">
+                            <table className="w-full text-xs">
+                              <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold">SKU</th>
+                                  <th className="px-3 py-2 text-left font-semibold">Brand</th>
+                                  <th className="px-3 py-2 text-left font-semibold">Size</th> {/* ⭐ NEW COLUMN */}
+                                  <th className="px-3 py-2 text-right font-semibold">Cases</th>
+                                  <th className="px-3 py-2 text-right font-semibold">Units</th>
+                                  <th className="px-3 py-2 text-right font-semibold">Revenue</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {categoryAnalysis.sku_details?.map((sku, idx) => (
+                                  <tr key={idx} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td className="px-3 py-2 font-medium">{sku.sku}</td>
+                                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{sku.brand}</td>
+                                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
+                                      <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 text-xs font-medium">
+                                        {sku.bottle_size}
+                                      </span>
+                                    </td> {/* ⭐ NEW CELL */}
+                                    <td className="px-3 py-2 text-right">{sku.cases.toLocaleString()}</td>
+                                    <td className="px-3 py-2 text-right font-semibold">{sku.units.toLocaleString()}</td>
+                                    <td className="px-3 py-2 text-right font-bold text-green-600 dark:text-green-400">
+                                      ₱{sku.revenue.toLocaleString()}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CollapsibleSection>
+
+                        {/* Summary Stats */}
+                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                            <div className="text-xs text-green-700 dark:text-green-400">Total Revenue</div>
+                            <div className="text-lg font-bold text-green-900 dark:text-green-300">
+                              ₱{categoryAnalysis.total_revenue?.toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                            <div className="text-xs text-blue-700 dark:text-blue-400">Total SKUs</div>
+                            <div className="text-lg font-bold text-blue-900 dark:text-blue-300">
+                              {categoryAnalysis.total_skus}
+                            </div>
                           </div>
                         </div>
                       </div>

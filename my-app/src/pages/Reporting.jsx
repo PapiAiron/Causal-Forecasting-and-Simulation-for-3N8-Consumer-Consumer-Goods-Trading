@@ -370,97 +370,249 @@ const Reporting = ({ onNavigate, onBack }) => {
             </Card>
           )}
 
-          {/* Category Analysis */}
-          {selectedPeriod === 'category' && categoryAnalysis && (
-            <Card className="p-6 mb-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">📦 Category & Bottle Size Analysis</h3>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Category Pie Chart */}
-                <div>
-                  <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-4">Sales by Category</h4>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={categoryAnalysis.categories}
-                        dataKey="sales"
-                        nameKey="category"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={(entry) => `${entry.category}: ${((entry.sales / categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0)) * 100).toFixed(1)}%`}
-                      >
-                        {categoryAnalysis.categories.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+         {/* Category Analysis - ENHANCED VERSION */}
+            {selectedPeriod === 'category' && categoryAnalysis && (
+              <Card className="p-6 mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">📦 Category & Brand Analysis</h3>
+                
+                {/* Top SKU Banner */}
+                {categoryAnalysis.top_sku && (
+                  <div className="mb-6 p-6 rounded-xl bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-2 border-yellow-300 dark:border-yellow-700">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-yellow-800 dark:text-yellow-400">🏆 Top Selling SKU</div>
+                        <div className="text-3xl font-bold text-yellow-900 dark:text-yellow-300 mt-2">
+                          {categoryAnalysis.top_sku.sku}
+                        </div>
+                        <div className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                          {categoryAnalysis.top_sku.brand} • {categoryAnalysis.top_sku.bottle_size}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-yellow-800 dark:text-yellow-400">Units Sold</div>
+                        <div className="text-3xl font-bold text-yellow-900 dark:text-yellow-300 mt-2">
+                          {categoryAnalysis.top_sku.units?.toLocaleString() || 0}
+                        </div>
+                        <div className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+                          {categoryAnalysis.top_sku.cases?.toLocaleString() || 0} cases
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-yellow-800 dark:text-yellow-400">Revenue Generated</div>
+                        <div className="text-3xl font-bold text-yellow-900 dark:text-yellow-300 mt-2">
+                          ₱{categoryAnalysis.top_sku.revenue?.toLocaleString() || 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                  {/* Brand Sales Pie Chart */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-4">Sales by Brand</h4>
+                    
+                    {categoryAnalysis?.brands && categoryAnalysis.brands.length > 0 ? (
+                      <>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={categoryAnalysis.brands}
+                              dataKey="sales"
+                              nameKey="brand"
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={100}
+                              label={(entry) => {
+                                const total = categoryAnalysis.brands.reduce((sum, b) => sum + b.sales, 0);
+                                const pct = ((entry.sales / total) * 100).toFixed(1);
+                                return `${entry.brand}: ${pct}%`;
+                              }}
+                            >
+                              {categoryAnalysis.brands.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        
+                        {/* Brand List */}
+                        <div className="mt-6 space-y-2">
+                          {categoryAnalysis.brands.map((brand, idx) => {
+                            const total = categoryAnalysis.brands.reduce((sum, b) => sum + b.sales, 0);
+                            const percentage = ((brand.sales / total) * 100).toFixed(1);
+                            
+                            return (
+                              <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-4 h-4 rounded" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                                  <span className="font-medium text-gray-900 dark:text-white">{brand.brand}</span>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold text-gray-900 dark:text-white">{brand.sales?.toLocaleString() || 0}</div>
+                                  <div className="text-xs text-gray-500">{percentage}%</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                        <p>No brand data available</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottle Size Chart */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-4">Sales by Bottle Size</h4>
+                    
+                    {categoryAnalysis?.bottle_sizes && categoryAnalysis.bottle_sizes.length > 0 ? (
+                      <>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={categoryAnalysis.bottle_sizes} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                            <XAxis type="number" stroke="#9CA3AF" />
+                            <YAxis type="category" dataKey="size" stroke="#9CA3AF" width={100} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Bar dataKey="sales" fill="#3B82F6" name="Sales" radius={[0, 8, 8, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+
+                        {/* Size List with Progress Bars */}
+                        <div className="mt-6 space-y-3">
+                          {categoryAnalysis.bottle_sizes.map((size, idx) => {
+                            const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
+                            const percentage = ((size.sales / total) * 100).toFixed(1);
+                            return (
+                              <div key={idx} className="space-y-1">
+                                <div className="flex justify-between text-sm">
+                                  <span className="font-medium text-gray-900 dark:text-white">{size.size}</span>
+                                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                    {size.sales?.toLocaleString()} ({percentage}%)
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                  <div 
+                                    className="h-2 rounded-full bg-blue-500 transition-all duration-500" 
+                                    style={{ width: `${percentage}%` }} 
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                        <p>No bottle size data available</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Product Categories */}
+                {categoryAnalysis?.categories && categoryAnalysis.categories.length > 0 && (
+                  <div className="mb-8">
+                    <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-4">Sales by Category</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {categoryAnalysis.categories.map((cat, idx) => {
+                        const total = categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0);
+                        const percentage = ((cat.sales / total) * 100).toFixed(1);
+                        return (
+                          <div key={idx} className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-2 border-purple-200 dark:border-purple-800">
+                            <div className="text-sm font-medium text-purple-800 dark:text-purple-400">{cat.category}</div>
+                            <div className="text-2xl font-bold text-purple-900 dark:text-purple-300 mt-2">
+                              {cat.sales?.toLocaleString()}
+                            </div>
+                            <div className="text-xs text-purple-700 dark:text-purple-400 mt-1">{percentage}% of total</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Detailed SKU Breakdown Table */}
+                <CollapsibleSection title="📋 Detailed SKU Breakdown" defaultOpen={false}>
+                  <div className="overflow-x-auto max-h-96">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Rank</th>
+                          <th className="px-4 py-3 text-left font-semibold">SKU</th>
+                          <th className="px-4 py-3 text-left font-semibold">Brand</th>
+                          <th className="px-4 py-3 text-left font-semibold">Size</th>
+                          <th className="px-4 py-3 text-left font-semibold">Category</th>
+                          <th className="px-4 py-3 text-right font-semibold">Cases</th>
+                          <th className="px-4 py-3 text-right font-semibold">Units</th>
+                          <th className="px-4 py-3 text-right font-semibold">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {categoryAnalysis.sku_details?.map((sku, idx) => (
+                          <tr key={idx} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                idx === 0 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400' :
+                                idx === 1 ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-400' :
+                                idx === 2 ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{sku.sku}</td>
+                            <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{sku.brand}</td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 text-xs font-medium">
+                                {sku.bottle_size}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{sku.category}</td>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{sku.cases?.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white">{sku.units?.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right font-bold text-green-600 dark:text-green-400">
+                              ₱{sku.revenue?.toLocaleString()}
+                            </td>
+                          </tr>
                         ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  
-                  {/* Category List */}
-                  <div className="mt-6 space-y-2">
-                    {categoryAnalysis.categories.map((cat, idx) => {
-                      const total = categoryAnalysis.categories.reduce((sum, c) => sum + c.sales, 0);
-                      const percentage = ((cat.sales / total) * 100).toFixed(1);
-                      return (
-                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                          <div className="flex items-center gap-3">
-                            <div className="w-4 h-4 rounded" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                            <span className="font-medium text-gray-900 dark:text-white">{cat.category}</span>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-gray-900 dark:text-white">{cat.sales.toLocaleString()}</div>
-                            <div className="text-xs text-gray-500">{percentage}%</div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CollapsibleSection>
+
+                {/* Summary Stats */}
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="p-6 rounded-xl bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800">
+                    <div className="text-sm font-medium text-green-700 dark:text-green-400">Total Revenue</div>
+                    <div className="text-3xl font-bold text-green-900 dark:text-green-300 mt-2">
+                      ₱{categoryAnalysis?.total_revenue?.toLocaleString() || 0}
+                    </div>
+                  </div>
+                  <div className="p-6 rounded-xl bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
+                    <div className="text-sm font-medium text-blue-700 dark:text-blue-400">Total Units</div>
+                    <div className="text-3xl font-bold text-blue-900 dark:text-blue-300 mt-2">
+                      {categoryAnalysis?.total_units?.toLocaleString() || 0}
+                    </div>
+                  </div>
+                  <div className="p-6 rounded-xl bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-800">
+                    <div className="text-sm font-medium text-purple-700 dark:text-purple-400">Total Cases</div>
+                    <div className="text-3xl font-bold text-purple-900 dark:text-purple-300 mt-2">
+                      {categoryAnalysis?.total_cases?.toLocaleString() || 0}
+                    </div>
+                  </div>
+                  <div className="p-6 rounded-xl bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800">
+                    <div className="text-sm font-medium text-amber-700 dark:text-amber-400">Total SKUs</div>
+                    <div className="text-3xl font-bold text-amber-900 dark:text-amber-300 mt-2">
+                      {categoryAnalysis?.total_skus || 0}
+                    </div>
                   </div>
                 </div>
-
-                {/* Bottle Size Chart */}
-                <div>
-                  <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-4">Sales by Bottle Size</h4>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={categoryAnalysis.bottle_sizes} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis type="number" stroke="#9CA3AF" />
-                      <YAxis type="category" dataKey="size" stroke="#9CA3AF" width={100} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="sales" fill="#3B82F6" name="Sales" radius={[0, 8, 8, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-
-                  {/* Bottle Size List */}
-                  <div className="mt-6 space-y-2">
-                    {categoryAnalysis.bottle_sizes.map((size, idx) => {
-                      const total = categoryAnalysis.bottle_sizes.reduce((sum, s) => sum + s.sales, 0);
-                      const percentage = ((size.sales / total) * 100).toFixed(1);
-                      return (
-                        <div key={idx} className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="font-medium text-gray-900 dark:text-white">{size.size}</span>
-                            <span className="font-semibold text-blue-600 dark:text-blue-400">{percentage}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div className="h-2 rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${percentage}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                <div className="text-sm text-blue-800 dark:text-blue-400">
-                  <strong>Total SKUs analyzed:</strong> {categoryAnalysis.total_skus}
-                </div>
-              </div>
-            </Card>
-          )}
-
+              </Card>
+            )}
           {/* Store Analytics */}
           {storeAnalytics && (
             <Card className="p-6 mb-6">

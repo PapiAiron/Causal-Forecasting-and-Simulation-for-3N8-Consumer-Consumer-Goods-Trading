@@ -22,6 +22,57 @@ if os.path.exists(MODEL_PATH):
         print(f"Error loading model: {e}")
         SAVED_MODEL = None
 
+# SKU Metadata with sizes
+SKU_METADATA = {
+    # Mountain Dew
+    'MD8': {'brand': 'Mountain Dew', 'size': '8oz', 'category': 'Soda'},
+    'MD12': {'brand': 'Mountain Dew', 'size': '12oz', 'category': 'Soda'},
+    'MD290': {'brand': 'Mountain Dew', 'size': '290ml', 'category': 'Soda'},
+    'MD750': {'brand': 'Mountain Dew', 'size': '750ml', 'category': 'Soda'},
+    'MD1L': {'brand': 'Mountain Dew', 'size': '1L', 'category': 'Soda'},
+    'MD1.25': {'brand': 'Mountain Dew', 'size': '1.25L', 'category': 'Soda'},
+    'MD1.5': {'brand': 'Mountain Dew', 'size': '1.5L', 'category': 'Soda'},
+    'MD1.5/6': {'brand': 'Mountain Dew', 'size': '1.5L', 'category': 'Soda'},
+    
+    # Pepsi
+    'P8': {'brand': 'Pepsi', 'size': '8oz', 'category': 'Soda'},
+    'P290': {'brand': 'Pepsi', 'size': '290ml', 'category': 'Soda'},
+    'P750': {'brand': 'Pepsi', 'size': '750ml', 'category': 'Soda'},
+    'P1L': {'brand': 'Pepsi', 'size': '1L', 'category': 'Soda'},
+    'P1.25': {'brand': 'Pepsi', 'size': '1.25L', 'category': 'Soda'},
+    'P1.5': {'brand': 'Pepsi', 'size': '1.5L', 'category': 'Soda'},
+    'P1.5/6': {'brand': 'Pepsi', 'size': '1.5L', 'category': 'Soda'},
+    
+    # 7Up
+    'S7': {'brand': '7Up', 'size': '7oz', 'category': 'Soda'},
+    'SS8': {'brand': '7Up', 'size': '8oz', 'category': 'Soda'},
+    'SS290': {'brand': '7Up', 'size': '290ml', 'category': 'Soda'},
+    'SEV290': {'brand': 'Seven', 'size': '290ml', 'category': 'Soda'},
+    'S1.25': {'brand': '7Up', 'size': '1.25L', 'category': 'Soda'},
+    'S1.5': {'brand': '7Up', 'size': '1.5L', 'category': 'Soda'},
+    
+    # Gatorade
+    'GBB350': {'brand': 'Gatorade', 'size': '350ml', 'category': 'Sports Drink'},
+    'GBB500': {'brand': 'Gatorade', 'size': '500ml', 'category': 'Sports Drink'},
+    'GTF350': {'brand': 'Gatorade', 'size': '350ml', 'category': 'Sports Drink'},
+    'GR500': {'brand': 'Gatorade', 'size': '500ml', 'category': 'Sports Drink'},
+    'GO500': {'brand': 'Gatorade', 'size': '500ml', 'category': 'Sports Drink'},
+    'GB900': {'brand': 'Gatorade', 'size': '900ml', 'category': 'Sports Drink'},
+    'GBB8': {'brand': 'Gatorade', 'size': '8oz', 'category': 'Sports Drink'},
+    'GBB237': {'brand': 'Gatorade', 'size': '237ml', 'category': 'Sports Drink'},
+    
+    # Milkis
+    'MILKIS': {'brand': 'Milkis', 'size': '250ml', 'category': 'Milk Drink'},
+    'MILKIS500': {'brand': 'Milkis', 'size': '500ml', 'category': 'Milk Drink'},
+    
+    # Tropicana
+    'TRO8': {'brand': 'Tropicana', 'size': '8oz', 'category': 'Juice'},
+    
+    # Premier Water
+    'PW350': {'brand': 'Premier Water', 'size': '350ml', 'category': 'Water'},
+    'PW500': {'brand': 'Premier Water', 'size': '500ml', 'category': 'Water'},
+    'PW1L': {'brand': 'Premier Water', 'size': '1L', 'category': 'Water'}
+}
 
 def parse_num_series(s, index=None):
     """Parse numeric series from various formats"""
@@ -1282,45 +1333,125 @@ def category_analysis():
         
         sku_cols = [col for col in df.columns if col not in [date_col, outlet_col]]
         
-        # Analyze by bottle size (assuming SKU names contain size info like "1L", "500ML", etc.)
+        # ENHANCED: Calculate per-SKU metrics with bottle size
+        sku_details = []
+        brands = {}
         bottle_sizes = {}
         categories = {}
         
-        for sku in sku_cols:
-            # Convert to numeric
-            df[sku] = parse_num_series(df[sku])
-            total_sales = df[sku].sum()
-            
-            # Extract bottle size from SKU name
-            sku_upper = sku.upper()
-            if 'L' in sku_upper or 'ML' in sku_upper or 'LITER' in sku_upper:
-                # Try to extract size
-                import re
-                size_match = re.search(r'(\d+\.?\d*)\s*(L|ML|LITER)', sku_upper)
-                if size_match:
-                    size = size_match.group(0)
-                    bottle_sizes[size] = bottle_sizes.get(size, 0) + total_sales
-            
-            # Categorize by product type (you can customize this logic)
-            if any(keyword in sku_upper for keyword in ['WATER', 'MINERAL']):
-                categories['Water'] = categories.get('Water', 0) + total_sales
-            elif any(keyword in sku_upper for keyword in ['COKE', 'PEPSI', 'COLA', 'SODA']):
-                categories['Carbonated'] = categories.get('Carbonated', 0) + total_sales
-            elif any(keyword in sku_upper for keyword in ['JUICE', 'ORANGE', 'APPLE', 'MANGO']):
-                categories['Juice'] = categories.get('Juice', 0) + total_sales
-            elif any(keyword in sku_upper for keyword in ['ENERGY', 'RED BULL', 'GATORADE']):
-                categories['Energy/Sports'] = categories.get('Energy/Sports', 0) + total_sales
-            else:
-                categories['Other'] = categories.get('Other', 0) + total_sales
+        total_cases = 0
+        total_units = 0
+        total_revenue = 0
+        top_sku = None
+        max_units = 0
         
-        # Sort by sales
-        bottle_sizes = dict(sorted(bottle_sizes.items(), key=lambda x: x[1], reverse=True))
-        categories = dict(sorted(categories.items(), key=lambda x: x[1], reverse=True))
+        for sku in sku_cols:
+            # Convert to numeric (cases)
+            df[sku] = parse_num_series(df[sku])
+            cases = df[sku].sum()
+            
+            if cases <= 0:
+                continue
+            
+            # Get SKU metadata
+            sku_info = SKU_METADATA.get(sku.strip(), {
+                'brand': 'Unknown',
+                'size': 'N/A',
+                'category': 'Other'
+            })
+            
+            # Get case quantity and price
+            case_qty = {
+                'MD8': 24, 'MD12': 24, 'MD290': 24, 'MD750': 12, 'MD1L': 12, 
+                'MD1.25': 12, 'MD1.5': 12, 'MD1.5/6': 6,
+                'P8': 24, 'P290': 24, 'P750': 12, 'P1L': 12, 
+                'P1.25': 12, 'P1.5': 12, 'P1.5/6': 6,
+                'S7': 24, 'SS8': 24, 'SS290': 24, 'SEV290': 24, 
+                'S1.25': 12, 'S1.5': 12,
+                'GBB350': 24, 'GBB500': 24, 'GTF350': 24, 'GR500': 24, 
+                'GO500': 24, 'GB900': 12, 'GBB8': 24, 'GBB237': 24,
+                'MILKIS': 30, 'MILKIS500': 20,
+                'TRO8': 24,
+                'PW350': 24, 'PW500': 24, 'PW1L': 12
+            }.get(sku.strip(), 1)
+            
+            case_price = {
+                'MD8': 380, 'MD12': 480, 'MD290': 380, 'MD750': 540, 'MD1L': 650,
+                'MD1.25': 720, 'MD1.5': 840, 'MD1.5/6': 420,
+                'P8': 380, 'P290': 380, 'P750': 540, 'P1L': 650,
+                'P1.25': 720, 'P1.5': 840, 'P1.5/6': 420,
+                'S7': 350, 'SS8': 380, 'SS290': 380, 'SEV290': 380,
+                'S1.25': 720, 'S1.5': 840,
+                'GBB350': 780, 'GBB500': 980, 'GTF350': 780, 'GR500': 980,
+                'GO500': 980, 'GB900': 780, 'GBB8': 480, 'GBB237': 550,
+                'MILKIS': 900, 'MILKIS500': 1200,
+                'TRO8': 420,
+                'PW350': 130, 'PW500': 150, 'PW1L': 170
+            }.get(sku.strip(), 0)
+            
+            # Calculate units and revenue
+            units = cases * case_qty
+            revenue = cases * case_price
+            
+            # Track totals
+            total_cases += cases
+            total_units += units
+            total_revenue += revenue
+            
+            # Track top SKU
+            if units > max_units:
+                max_units = units
+                top_sku = {
+                    'sku': sku,
+                    'brand': sku_info['brand'],
+                    'bottle_size': sku_info['size'],
+                    'cases': float(cases),
+                    'units': float(units),
+                    'revenue': float(revenue)
+                }
+            
+            # Add to SKU details
+            sku_details.append({
+                'sku': sku,
+                'brand': sku_info['brand'],
+                'bottle_size': sku_info['size'],  # ⭐ NEW
+                'category': sku_info['category'],
+                'cases': float(cases),
+                'units': float(units),
+                'revenue': float(revenue)
+            })
+            
+            # Aggregate by brand
+            brands[sku_info['brand']] = brands.get(sku_info['brand'], 0) + units
+            
+            # Aggregate by bottle size
+            bottle_sizes[sku_info['size']] = bottle_sizes.get(sku_info['size'], 0) + units
+            
+            # Aggregate by category
+            categories[sku_info['category']] = categories.get(sku_info['category'], 0) + units
+        
+        # Sort and format results
+        sorted_brands = sorted([{'brand': k, 'sales': float(v)} for k, v in brands.items()], 
+                              key=lambda x: x['sales'], reverse=True)
+        
+        sorted_bottle_sizes = sorted([{'size': k, 'sales': float(v)} for k, v in bottle_sizes.items()], 
+                                     key=lambda x: x['sales'], reverse=True)
+        
+        sorted_categories = sorted([{'category': k, 'sales': float(v)} for k, v in categories.items()], 
+                                   key=lambda x: x['sales'], reverse=True)
+        
+        sorted_sku_details = sorted(sku_details, key=lambda x: x['units'], reverse=True)
         
         return jsonify({
-            "bottle_sizes": [{"size": k, "sales": float(v)} for k, v in bottle_sizes.items()],
-            "categories": [{"category": k, "sales": float(v)} for k, v in categories.items()],
-            "total_skus": len(sku_cols)
+            "brands": sorted_brands,
+            "bottle_sizes": sorted_bottle_sizes,
+            "categories": sorted_categories,
+            "sku_details": sorted_sku_details,
+            "total_skus": len(sku_cols),
+            "total_cases": float(total_cases),
+            "total_units": float(total_units),
+            "total_revenue": float(total_revenue),
+            "top_sku": top_sku  # ⭐ Make sure this is included
         })
 
     except Exception as e:
@@ -1328,8 +1459,6 @@ def category_analysis():
         print(f"Category analysis error: {e}")
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 400
-    
-
 
 @app.route("/causal-factors-report", methods=["POST"])
 def causal_factors_report():

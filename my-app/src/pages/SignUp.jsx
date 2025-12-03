@@ -203,7 +203,7 @@ const SignUp = ({ onNavigate }) => {
       setSuccess(
         `Account created successfully as ${role === 'admin' ? 'Administrator' : 'Staff'}! Please wait for an administrator to verify your account before logging in.`
       );
-      
+
       // Clear form
       setName("");
       setEmail("");
@@ -212,10 +212,7 @@ const SignUp = ({ onNavigate }) => {
       setRole("staff");
       setPasswordStrength("");
 
-      // Redirect to login after 4 seconds
-      setTimeout(() => {
-        onNavigate("login");
-      }, 4000);
+      // DO NOT auto-redirect - let user click login button when ready
 
     } catch (err) {
       console.error("Signup error:", err);
@@ -226,7 +223,21 @@ const SignUp = ({ onNavigate }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-8">
+  <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-8">
+    {/* Loading Overlay */}
+    {loading && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-xl max-w-sm mx-4">
+          <div className="flex flex-col items-center">
+            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-800 dark:text-white font-semibold text-lg mb-2">Creating Account...</p>
+            <p className="text-gray-600 dark:text-gray-400 text-sm text-center">
+              Please wait while we set up your account
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
       <div className="w-full max-w-md bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-8">
         <div className="flex justify-center mb-6">
           <img 
@@ -246,12 +257,21 @@ const SignUp = ({ onNavigate }) => {
         )}
         
         {success && (
-          <div className="text-green-600 text-sm mb-3 font-medium bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
-            {success}
+        <div className="text-green-600 text-sm mb-3 font-medium bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+          <div className="flex items-start gap-2">
+            <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="font-semibold mb-1">Account Created Successfully!</p>
+              <p>{success}</p>
+              <p className="mt-2 text-xs">Click the login button below when you're ready.</p>
+            </div>
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="space-y-5">
+        {!success && <div className="space-y-5">
           <div>
             <input
               type="text"
@@ -352,18 +372,29 @@ const SignUp = ({ onNavigate }) => {
           >
             {loading ? "Creating Account..." : "Sign Up"}
           </button>
-        </div>
+        </div>}
+        
 
-        <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
-          Already have an account?{" "}
+        {success ? (
           <button
             onClick={() => onNavigate("login")}
-            className="hover:underline font-medium"
-            style={{ color: theme.chart }}
+            className="w-full text-white py-3 rounded-lg shadow-md hover:opacity-90 transition mt-4 font-medium"
+            style={{ backgroundColor: theme.chart }}
           >
-            Login
+            Go to Login Page
           </button>
-        </p>
+        ) : (
+          <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
+            Already have an account?{" "}
+            <button
+              onClick={() => onNavigate("login")}
+              className="hover:underline font-medium"
+              style={{ color: theme.chart }}
+            >
+              Login
+            </button>
+          </p>
+        )}
 
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-4">
           By signing up, you agree to our Terms of Service and Privacy Policy

@@ -60,6 +60,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [storeDemandCauses, setStoreDemandCauses] = useState(null);
   const [activeInsightTab, setActiveInsightTab] = useState('overview');
   const [currentUser, setCurrentUser] = useState(null);
+  const [isRealFile, setIsRealFile] = useState(false);
   const [isLoadingFromFirebase, setIsLoadingFromFirebase] = useState(true);
   const [salesMetrics, setSalesMetrics] = useState({
     today: 0,
@@ -120,7 +121,6 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
   };
 
-  // Load user data from Firestore
   const loadUserData = async (userId) => {
     try {
       const userDocRef = doc(db, 'userFiles', userId);
@@ -137,7 +137,13 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
           if (analysis.forecastPayload) setForecastPayload(analysis.forecastPayload);
           if (analysis.decisions) setDecisions(analysis.decisions);
           if (analysis.featureImportance) setFeatureImportance(analysis.featureImportance);
-          if (analysis.causalEvents) setCausalEvents(analysis.causalEvents);
+          
+          // MIGRATE AND LOAD EVENTS - Fixed order
+          if (analysis.causalEvents) {
+            const migratedEvents = migrateOldEvents(analysis.causalEvents);
+            setCausalEvents(migratedEvents);
+          }
+          
           if (analysis.storeAnalytics) setStoreAnalytics(analysis.storeAnalytics);
           if (analysis.causalFactorAnalysis) setCausalFactorAnalysis(analysis.causalFactorAnalysis);
           if (analysis.fullReports) setFullReports(analysis.fullReports);
@@ -151,6 +157,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
           // Create a pseudo-file object for display purposes
           const pseudoFile = new File([''], data.fileName, { type: 'text/csv' });
           setFile(pseudoFile);
+          setIsRealFile(false); // Mark as pseudo-file
         }
         
         setUploadStatus('Previous data loaded successfully');
@@ -167,12 +174,19 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   // Save current state to Firestore with explicit values
   const saveCurrentStateToFirestore = async (userId, fileName, currentState) => {
     try {
-      const userDocRef = doc(db, 'userFiles', userId);
-      await setDoc(userDocRef, {
-        fileName: fileName,
-        uploadedAt: new Date().toISOString(),
-        analysisData: currentState
-      }, { merge: true });
+    const userDocRef = doc(db, 'userFiles', userId);
+    await setDoc(userDocRef, {
+      fileName: fileName,
+      uploadedAt: new Date().toISOString(),
+      analysisData: currentState,
+      // ADD THIS - Save all data for Reporting page
+      reportingData: {
+        fullReports: currentState.fullReports,
+        categoryAnalysis: currentState.categoryAnalysis,
+        storeAnalytics: currentState.storeAnalytics,
+        savedAt: new Date().toISOString()
+      }
+    }, { merge: true });
       console.log('✓ Data saved to Firestore');
     } catch (error) {
       console.error('Error saving to Firestore:', error);
@@ -311,15 +325,51 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const forecastLimits = getForecastPeriodLimits();
 
   const eventTypes = [
-    { value: 'weather_hot', label: 'Hot Weather', icon: Sun, color: '#F59E0B', impact: 25 },
-    { value: 'weather_cold', label: 'Cold Weather', icon: Cloud, color: '#6B7280', impact: -15 },
-    { value: 'weather_rainy', label: 'Rainy Season', icon: CloudRain, color: '#3B82F6', impact: -20 },
-    { value: 'holiday', label: 'Holiday/Festival', icon: Gift, color: '#10B981', impact: 40 },
-    { value: 'event', label: 'Major Event', icon: Users, color: '#8B5CF6', impact: 35 },
-    { value: 'other', label: 'Other Causal Factors', icon: AlertTriangle, color: '#F59E0B', impact: 0 }
-  ];
+    { value: 'weather_hot', label: 'Hot Weather', iconName: 'Sun', color: '#F59E0B', impact: 25 },
+    { value: 'weather_cold', label: 'Cold Weather', iconName: 'Cloud', color: '#6B7280', impact: -15 },
+    { value: 'weather_rainy', label: 'Rainy Season', iconName: 'CloudRain', color: '#3B82F6', impact: -20 },
+    { value: 'holiday', label: 'Holiday/Festival', iconName: 'Gift', color: '#10B981', impact: 40 },
+    { value: 'event', label: 'Major Event', iconName: 'Users', color: '#8B5CF6', impact: 35 },
+    { value: 'other', label: 'Other Causal Factors', iconName: 'AlertTriangle', color: '#F59E0B', impact: 0 }
+  ]
 
+    // Add this helper function RIGHT AFTER eventTypes
+  const getIconComponent = (iconName) => {
+    const iconMap = {
+      'Sun': Sun,
+      'Cloud': Cloud,
+      'CloudRain': CloudRain,
+      'Gift': Gift,
+      'Users': Users,
+      'AlertTriangle': AlertTriangle
+    };
+    return iconMap[iconName] || AlertTriangle;
+  };
 
+  // Add migration function AFTER getIconComponent
+  const migrateOldEvents = (events) => {
+    if (!events || !Array.isArray(events)) return [];
+    
+    return events.map(event => {
+      // If event has 'icon' instead of 'iconName', convert it
+      if (event.icon && !event.iconName) {
+        // Try to determine iconName from event type
+        const eventType = eventTypes.find(t => t.value === event.type);
+        return {
+          ...event,
+          iconName: eventType?.iconName || 'AlertTriangle',
+          icon: undefined // Remove the invalid icon property
+        };
+      }
+      return event;
+    });
+  };
+
+    // Helper function to show save status
+  const showSaveStatus = (message, isError = false) => {
+    setUploadStatus(message);
+    setTimeout(() => setUploadStatus(''), 2000);
+  };
 
   const fetchStoreAnalytics = async (uploadedFile) => {
     setIsLoading(true);
@@ -501,9 +551,12 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
     
     setFile(f);
-
-    // Run causal forecast
-    await runForecastWithEvents(f, causalEvents);
+    setIsRealFile(true);
+    // RESET EVENTS when new file is uploaded
+    setCausalEvents([]);
+    
+    // Run causal forecast with empty events
+    await runForecastWithEvents(f, []);
 
     const forecastForm = new FormData();
     forecastForm.append('file', f);
@@ -530,16 +583,15 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       if (results[1]) setCausalFactorAnalysis(results[1]);
       if (results[2]) setFullReports(results[2]);
       
-      // Wait a bit for all states to update
-      // Save with the results we just fetched
+      // Save with the results we just fetched AND RESET EVENTS
       setTimeout(async () => {
         if (currentUser) {
           await saveCurrentStateToFirestore(currentUser.uid, f.name, {
-            scenarioGraph: scenarioGraph, // This will be set from runForecastWithEvents
+            scenarioGraph: scenarioGraph,
             forecastPayload: forecastPayload,
             decisions: decisions,
             featureImportance: featureImportance,
-            causalEvents: causalEvents,
+            causalEvents: [], // EMPTY EVENTS for new file
             storeAnalytics: results[0],
             causalFactorAnalysis: results[1],
             fullReports: results[2],
@@ -548,7 +600,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             storeDemandCauses: storeDemandCauses
           });
         }
-      }, 2000); // Increased delay to ensure all states are updated
+      }, 2000);
     } catch (err) {
       console.error("Error fetching reports:", err);
       setError(String(err));
@@ -557,6 +609,13 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
   const handleAddEvent = async () => {
     if (!newEvent.startDate) return alert('Please select a start date');
+    
+    // CHECK IF FILE IS REAL
+    if (!isRealFile) {
+      alert('Please upload a new file to add events. The current file data is from a previous session.');
+      return;
+    }
+    
     const { minDate, maxDate } = forecastLimits;
     if (minDate && newEvent.startDate < minDate) return alert(`Start date must be on or after ${minDate}`);
     if (maxDate && newEvent.startDate > maxDate) return alert(`Start date must be on or before ${maxDate}`);
@@ -578,44 +637,54 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     }
     
     const eventType = eventTypes.find(e => e.value === newEvent.type);
-    const updatedEvents = [...causalEvents, { ...newEvent, id: Date.now(), typeLabel: eventType.label, color: eventType.color, icon: eventType.icon }];
+    const updatedEvents = [...causalEvents, { 
+      ...newEvent, 
+      id: Date.now(), 
+      typeLabel: eventType.label, 
+      color: eventType.color, 
+      iconName: eventType.iconName
+    }];
+        
+    // Update state immediately
     setCausalEvents(updatedEvents);
     setShowEventModal(false);
     setNewEvent({ type: 'weather_hot', startDate: '', endDate: '', impact: eventTypes[0].impact, description: '' });
     
-    if (file) {
-      await runForecastWithEvents(file, updatedEvents);
-
-      // Save to Firestore with updated events - use longer delay
-      setTimeout(async () => {
-        if (currentUser) {
-          await saveCurrentStateToFirestore(currentUser.uid, file.name, {
-            scenarioGraph: scenarioGraph, // Will be updated by runForecastWithEvents
-            forecastPayload: forecastPayload,
-            decisions: decisions,
-            featureImportance: featureImportance,
-            causalEvents: updatedEvents,
-            storeAnalytics: storeAnalytics,
-            causalFactorAnalysis: causalFactorAnalysis,
-            fullReports: fullReports,
-            decisionSupport: decisionSupport,
-            categoryAnalysis: categoryAnalysis,
-            storeDemandCauses: storeDemandCauses
-          });
-        }
-      }, 1500);
+    // Show saving status
+    setUploadStatus('💾 Saving event...');
+    
+    // Save to Firestore FIRST before running forecast
+    if (currentUser && file) {
+      try {
+        await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+          scenarioGraph,
+          forecastPayload,
+          decisions,
+          featureImportance,
+          causalEvents: updatedEvents,
+          storeAnalytics,
+          causalFactorAnalysis,
+          fullReports,
+          decisionSupport,
+          categoryAnalysis,
+          storeDemandCauses
+        });
+        console.log('✓ Events saved to Firestore');
+        setUploadStatus('✅ Event saved successfully!');
+      } catch (err) {
+        console.error('Error saving events to Firestore:', err);
+        setError('Failed to save events to cloud storage');
+        setUploadStatus('❌ Failed to save event');
+        return;
+      }
     }
     
-  };
-
-  const handleRemoveEvent = async (id) => {
-    const updatedEvents = causalEvents.filter(e => e.id !== id);
-    setCausalEvents(updatedEvents);
-    
-    if (file) {
+    // Then run the forecast with updated events
+    if (file && isRealFile) {
+      setUploadStatus('🔄 Updating forecast...');
       await runForecastWithEvents(file, updatedEvents);
       
-      // Save to Firestore with updated events
+      // Save again after forecast completes
       setTimeout(async () => {
         if (currentUser) {
           await saveCurrentStateToFirestore(currentUser.uid, file.name, {
@@ -631,10 +700,85 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             categoryAnalysis,
             storeDemandCauses
           });
+          setUploadStatus('✅ Forecast updated!');
+          setTimeout(() => setUploadStatus(''), 2000);
         }
-      }, 500);
+      }, 1500);
+    } else {
+      // If pseudo-file, just clear the status
+      setTimeout(() => setUploadStatus(''), 2000);
     }
   };
+
+  const handleRemoveEvent = async (id) => {
+    // CHECK IF FILE IS REAL
+    if (!isRealFile) {
+      alert('Please upload a new file to modify events. The current file data is from a previous session.');
+      return;
+    }
+    
+    const updatedEvents = causalEvents.filter(e => e.id !== id);
+    setCausalEvents(updatedEvents);
+    
+    // Show saving status
+    setUploadStatus('💾 Removing event...');
+    
+    // Save to Firestore immediately
+    if (currentUser && file) {
+      try {
+        await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+          scenarioGraph,
+          forecastPayload,
+          decisions,
+          featureImportance,
+          causalEvents: updatedEvents,
+          storeAnalytics,
+          causalFactorAnalysis,
+          fullReports,
+          decisionSupport,
+          categoryAnalysis,
+          storeDemandCauses
+        });
+        console.log('✓ Event removed and saved to Firestore');
+        setUploadStatus('✅ Event removed!');
+      } catch (err) {
+        console.error('Error saving after event removal:', err);
+        setUploadStatus('❌ Failed to remove event');
+        return;
+      }
+    }
+    
+    // Then recalculate forecast
+    if (file && isRealFile) {
+      setUploadStatus('🔄 Updating forecast...');
+      await runForecastWithEvents(file, updatedEvents);
+      
+      // Save again with updated forecast
+      setTimeout(async () => {
+        if (currentUser) {
+          await saveCurrentStateToFirestore(currentUser.uid, file.name, {
+            scenarioGraph,
+            forecastPayload,
+            decisions,
+            featureImportance,
+            causalEvents: updatedEvents,
+            storeAnalytics,
+            causalFactorAnalysis,
+            fullReports,
+            decisionSupport,
+            categoryAnalysis,
+            storeDemandCauses
+          });
+          setUploadStatus('✅ Forecast updated!');
+          setTimeout(() => setUploadStatus(''), 2000);
+        }
+      }, 1500);
+    } else {
+      // If pseudo-file, just clear the status
+      setTimeout(() => setUploadStatus(''), 2000);
+    }
+  };
+
 
   const handleSalesQuery = async () => {
     if (!file) {
@@ -1027,10 +1171,11 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         icon={TrendingUp}
         onBack={onBack} />
         <main className="max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-6">  
-          <div className="grid grid-cols-1 lg:grid-cols-[40%_20%_40%] gap-6">
+          <div className=" gap-6">
+            <div class="grid grid-cols-5 gap-4 mb-4">
             {/* SALES QUERY CARD */}
-              <Card className="p-6">
-                <div className="flex justify-between items-center mb-4">
+            <Card className="p-6 box col-span-2">
+                <div className="flex justify-between items-center mb-">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🔍 Sales Query</h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Search exact sales for specific dates or periods</p>
@@ -1286,29 +1431,64 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 )}
               </Card>
 
+            <Card className="p-6 box col-span-1">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
+                <div>
+                  <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
+                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
+
+                 {/* File status with session indicator */}
+                  {file && (
+                    <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Current file: {file.name}
+                      {!isRealFile && (
+                        <span className="ml-2 px-2 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400">
+                          📁 Loaded from previous session
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
+                    <Upload size={18} />
+                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
+                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
+                  </label>
+                </div>
+              </div>
+              {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
+              {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
+            </Card>
             
-            
-            <Card className="p-6">
+            <Card className="p-6 box col-span-2">
+
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Causal Events</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Plan and manage events that impact beverage sales</p>
                 </div>
                 <button 
-                  onClick={() => setShowEventModal(true)} 
+                  onClick={() => {
+                    if (!isRealFile) {
+                      alert('Please upload a new file to add events. The current data is from a previous session.');
+                      return;
+                    }
+                    setShowEventModal(true);
+                  }} 
                   disabled={!file}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${!file ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} 
                   style={{ backgroundColor: theme.chart }}
-                  title={!file ? 'Upload data first to add events' : 'Add a new causal event'}
+                  title={!file ? 'Upload data first to add events' : !isRealFile ? 'Upload new file to modify events' : 'Add a new causal event'}
                 >
                   <Plus size={18} /><span>Add Event</span>
-                </button>
+              </button>
               </div>
               <div className="space-y-2">
                 {causalEvents.length === 0 ? (
                   <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No causal events added yet. Click "Add Event" to start planning.</div>
                 ) : causalEvents.map(event => {
-                  const Icon = event.icon;
+                  const Icon = getIconComponent(event.iconName); // Use helper function to get icon
                   return (
                     <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
                       <div className="flex items-center space-x-3">
@@ -1331,31 +1511,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 })}
               </div>
             </Card>
-
-            <Card className="p-6">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
-                <div>
-                  <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">Data Upload & Analysis</h2>
-                  <p className="text-center text-sm text-gray-600 dark:text-gray-400">Upload historical sales data</p>
-
-                  {/* ADD THIS NEW SECTION */}
-                  {file && (
-                    <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Current file: {file.name}
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <label className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white cursor-pointer transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`} style={{ backgroundColor: theme.chart }}>
-                    <Upload size={18} />
-                    <span>{isLoading ? 'Processing...' : 'Upload'}</span>
-                    <input type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" onChange={handleFileUploadAndAnalyze} disabled={isLoading} className="hidden" />
-                  </label>
-                </div>
-              </div>
-              {uploadStatus && <div className="text-sm font-medium" style={{ color: theme.chart }}>{uploadStatus}</div>}
-              {error && <div className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</div>}
-            </Card>
+            </div>
 
             
             
@@ -1408,8 +1564,10 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </>
             )}
 
+
+
             {/* MODERN GRID LAYOUT FOR CHARTS */}
-              <div className="max-w-[100%] lg:col-span-3 grid grid-cols-1 lg:grid-cols-[85%_15%] gap-6">
+
                 
                 {/* Row 1: Main Overview Chart (Full Width) */}
                 <Card className="p-6 ">
@@ -1517,48 +1675,48 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   )}
                 </Card>
 
-              {storeAnalytics && (
-              <Card className="p-6">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📊 Store-Level Analytics</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Top Store Buyers</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {storeAnalytics.top_buyers?.length > 6 && (
-                            <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                              Show {storeAnalytics.top_buyers.length - 6} more stores...
-                            </button>
-                          )}
-                        {storeAnalytics.top_buyers?.slice(0, 6).map((store, idx) => (
-                        <div key={idx} className="p-4 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
-                          <div className="text-sm font-medium text-blue-800 dark:text-blue-400">#{idx + 1} {store.name}</div>
-                          <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{store.sales.toLocaleString()}</div>
-                          <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">Total purchases</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {storeAnalytics.store_demand_patterns && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Peak Demand Days by Store</h4>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {Object.entries(storeAnalytics.store_demand_patterns).slice(0, 5).map(([store, days], idx) => (
-                          <div key={idx} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                            <div className="font-semibold text-gray-900 dark:text-white mb-2">{store}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                              {days.slice(0, 3).map((day, dayIdx) => (
-                                <div key={dayIdx}>• {day.DATE}: {day.total.toLocaleString()} units</div>
-                              ))}
+                  {storeAnalytics && (
+                  <Card className="p-6">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">📊 Store-Level Analytics</h3>
+                      <div className="space-y-6">
+                        <div>
+                          <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Top Store Buyers</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {storeAnalytics.top_buyers?.length > 6 && (
+                                <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                                  Show {storeAnalytics.top_buyers.length - 6} more stores...
+                                </button>
+                              )}
+                            {storeAnalytics.top_buyers?.slice(0, 6).map((store, idx) => (
+                            <div key={idx} className="p-4 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+                              <div className="text-sm font-medium text-blue-800 dark:text-blue-400">#{idx + 1} {store.name}</div>
+                              <div className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{store.sales.toLocaleString()}</div>
+                              <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">Total purchases</div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            )}
+
+                    {storeAnalytics.store_demand_patterns && (
+                      <div>
+                        <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">Peak Demand Days by Store</h4>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {Object.entries(storeAnalytics.store_demand_patterns).slice(0, 5).map(([store, days], idx) => (
+                            <div key={idx} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                              <div className="font-semibold text-gray-900 dark:text-white mb-2">{store}</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                                {days.slice(0, 3).map((day, dayIdx) => (
+                                  <div key={dayIdx}>• {day.DATE}: {day.total.toLocaleString()} units</div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+                )}
 
             
                 {/* Row 2: Two Charts Side by Side */}
@@ -1608,7 +1766,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                 {causalEvents.map((event) => {
                                   const eventKey = `${event.typeLabel}_${event.id}`;
                                   const totalImpact = forecastData.reduce((sum, d) => sum + (d[eventKey] || 0), 0);
-                                  const Icon = event.icon;
+                                  const Icon = getIconComponent(event.iconName); // Use helper function
                                   return (
                                     <div key={event.id} className="p-2 rounded-lg border" style={{ backgroundColor: event.color + '10', borderColor: event.color + '40' }}>
                                       <div className="flex items-center gap-1 mb-1">
@@ -1836,11 +1994,6 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 </div>
               </div>
            
-
-
-          </div>
-
-
           {/* Decision Support System - AI-Powered Insights */}
             {decisionSupport && (
               <Card className="p-6">
@@ -1851,10 +2004,6 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     <p className="text-sm text-purple-700 dark:text-purple-400 mt-1">
                       Strategic insights and recommendations powered by {decisionSupport.generated_by}
                     </p>
-              
-                 
-                
-
                 {/* Key Metrics Dashboard */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                   <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">

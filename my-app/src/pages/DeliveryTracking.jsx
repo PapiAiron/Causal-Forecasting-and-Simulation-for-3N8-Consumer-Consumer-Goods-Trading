@@ -29,8 +29,8 @@ const mockDeliveries = [
     id: 'DLV-20251201-001',
     store: { name: '7-Eleven Biñan', address: 'Brgy. II, Biñan, Laguna', contact: '0917-111-2222' },
     items: [
-      { sku: 'COKE-1L', name: 'Coca-Cola 1L', cases: 12 },
-      { sku: 'SPR-500', name: 'Sprite 500ml', cases: 8 }
+      { sku: 'P1.5', name: 'Pepsi 1.5L', cases: 12 },
+      { sku: 'MD1.5', name: 'Mountain-Dew 1.5L', cases: 8 }
     ],
     driver: 'Juan Dela Cruz',
     vehicle: 'Truck 102',

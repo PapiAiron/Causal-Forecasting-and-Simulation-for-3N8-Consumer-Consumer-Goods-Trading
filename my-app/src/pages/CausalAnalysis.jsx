@@ -18,6 +18,13 @@ import { LayoutWrapper } from './DashboardHome';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
+import {createPortal} from 'react-dom';
+
+export { createPortal } from "react-dom";
+
+export function Portal({ children }) {
+  return createPortal(children, document.body);
+}
 
   const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -796,16 +803,24 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               </div>
             </Card>
 
+                {/* Floating Window for adding causal events */}
             {showEventModal && (
-              <>
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowEventModal(false)} />
-                <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-                  <Card className="w-full max-w-lg p-6">
+              <Portal>
+                <>
+                <div 
+                  className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" 
+                  onClick={() => setShowEventModal(false)} 
+                />
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+                  <Card className="w-full max-w-lg p-6 relative pointer-events-auto">``
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Causal Event</h3>
-                      <button onClick={() => setShowEventModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-                        <X className="w-5 h-5" />
-                      </button>
+                        <button
+                          onClick={() => setShowEventModal(false)}
+                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
                     </div>
                     <div className="space-y-4">
                       <div>
@@ -842,6 +857,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   </Card>
                 </div>
               </>
+              </Portal>
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 ">
@@ -865,7 +881,60 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={displayData} margin={{ top: 10, right: 30, left: 10, bottom: timeView === 'daily' ? 80 : 60 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="ds" stroke="#9CA3AF" tick={{ fontSize: timeView === 'daily' ? 10 : 11, fill: '#9CA3AF' }} angle={timeView === 'daily' ? -45 : timeView === 'weekly' ? -35 : 0} textAnchor={timeView === 'daily' || timeView === 'weekly' ? 'end' : 'middle'} height={timeView === 'daily' ? 80 : 60} interval={timeView === 'daily' && displayData.length > 30 ? Math.floor(displayData.length / 20) : 0} />
+                      <XAxis
+                        dataKey="ds"
+                        stroke="#9CA3AF"
+                        tick={{ fontSize: timeView === "daily" ? 10 : 11, fill: "#9CA3AF" }}
+                        interval="preserveStartEnd"
+                        angle={timeView === "daily" ? -45 : timeView === "weekly" ? -30 : 0}
+                        textAnchor={timeView === "daily" || timeView === "weekly" ? "end" : "middle"}
+                        height={65}
+                       tickFormatter={(value) => {
+                        // DAILY = already ISO dates → display directly
+                        if (timeView === "daily") {
+                          const d = new Date(value);
+                          return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                        }
+
+                        // WEEKLY
+                        if (timeView === "weekly") {
+                          // If already formatted (e.g., "W3 Apr 2023"), just display it
+                          if (value.startsWith("W")) {
+                            return value;
+                          }
+                          // Handle "2023-W03" format
+                          const [year, week] = value.split("-W").map(Number);
+                          const jan4 = new Date(year, 0, 4);
+                          const monday = new Date(jan4);
+                          monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (week - 1) * 7);
+                          return monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                        }
+
+                        // MONTHLY
+                      if (timeView === "monthly" && value.includes(" ")) {
+                        const [month, year] = value.split(" ");
+                        return `${month} '${year.slice(-2)}`;
+                      }
+
+                        // QUARTERLY
+                        if (timeView === "quarterly") {
+                          // If already formatted (e.g., "Q1 2024"), just display it
+                          if (value.startsWith("Q")) {
+                            return value;
+                          }
+                          // Handle "2024-Q1" format
+                          const [year, q] = value.split("-Q").map(Number);
+                          return `Q${q} ${year}`;
+                        }
+
+                        // YEARLY
+                        if (timeView === "yearly") {
+                          return value; // "2024" works as-is
+                        }
+
+                        return value;
+                      }}
+                      />
                       <YAxis stroke="#9CA3AF" tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => v.toLocaleString()} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="line" />

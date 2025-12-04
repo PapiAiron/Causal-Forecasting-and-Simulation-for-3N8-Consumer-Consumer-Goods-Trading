@@ -18,3 +18,4 @@ SEPARATE TO OUTPUTS/ PUT IN ANOTHER TAB DONE
 AlSO THE EVENTS/CAUSAL IN THE DATABASE RECORD DONE
 Sales Query Accuracy
 Saving AI insight into the database
+Weekly Sales Reports should output the latest week.

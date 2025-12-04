@@ -1521,15 +1521,15 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
   return (
     <LayoutWrapper currentPage="causal-analysis" onNavigate={onNavigate}>
-      <div className="pt-24">
+      <div className="pt-24 pb-6">
         <Header
           title="Causal Analysis & Events"
           description="Factor Impact, Event Planning & Advanced Forecasting for Beverage Sales"
           icon={TrendingUp}
           onBack={onBack}
         />
-        <main className="max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className=" gap-6">
+        <main className="max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8 py-4 mt-4">
+          <div className="space-y-6">
             <div class="grid grid-cols-4 gap-4 mb-4">
               <Card className="p-6 box col-span-2">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
@@ -2764,7 +2764,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
           {/* Decision Support System - AI-Powered Insights */}
           {decisionSupport && (
-            <Card className="p-6 mb-6">
+            <Card className="p-6 mt-6 mb-6">
               <h2 className="text-xl font-bold text-purple-900 dark:text-purple-300 flex items-center gap-2">
                 <Zap className="w-6 h-6" />
                 AI-Powered Decision Support System
@@ -3008,7 +3008,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             )}
 
           {featureImportance.length > 0 && (
-            <Card className="p-6">
+            <Card className="p-6 mb-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Feature Importance
               </h3>

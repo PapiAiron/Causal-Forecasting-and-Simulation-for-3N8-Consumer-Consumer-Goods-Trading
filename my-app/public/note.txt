@@ -1,8 +1,17 @@
 #update requirements.txt
-pip install -r requirements
 python -m pip freeze > requirements.txt
 
 
+#New cloned BACKEND
+cd backend
+python -m venv venv
+venv/Scripts/activate
+pip install -r requirements
+python app.py
+
+
+#New cloned Frontend
+cd my-app
 #react requirements
 npm install
 npm install firebase
@@ -11,9 +20,11 @@ npm install react-router-dom recharts lucide-react
    npm install -D tailwindcss postcss autoprefixer
    npx tailwindcss init -p
    npm install framer-motion
-
-   
    npm install express ws googleapis cors
+
+    npm run dev
+
+
 
 
 #BACKEND

@@ -93,7 +93,7 @@ export default function LandingPage({ onNavigate }) {
 
 const team = [
   { 
-    name: 'Marc Airon, Cantal T.',
+    name: 'Cantal, Marc Airon T.',
     position: 'Lead Researcher | Backend',
     image: '/images/team/member1.jpg'
   },

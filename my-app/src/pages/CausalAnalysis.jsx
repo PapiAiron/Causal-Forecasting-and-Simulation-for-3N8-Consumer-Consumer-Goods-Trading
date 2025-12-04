@@ -60,7 +60,7 @@ const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
   );
 };
 const CausalAnalysis = ({ onNavigate, onBack }) => {
-  const { theme } = useTheme();
+  const { theme, darkMode } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
   const [error, setError] = useState("");
@@ -101,6 +101,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [isQuerying, setIsQuerying] = useState(false);
+  const [isAISupportExpanded, setIsAISupportExpanded] = useState(false);
   // Monitor authentication state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1530,7 +1531,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         />
         <main className="max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8 py-4 mt-4">
           <div className="space-y-6">
-            <div class="grid grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-4 gap-4 mb-4">
               <Card className="p-6 box col-span-2">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
                   <div>
@@ -1700,138 +1701,142 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
             {showEventModal && (
               <Portal>
-                <>
-                  <div
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
-                    onClick={() => setShowEventModal(false)}
-                  />
-                  <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
-                    <Card className="w-full max-w-lg p-6 relative pointer-events-auto">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                          Add Causal Event
-                        </h3>
-                        <button
-                          onClick={() => setShowEventModal(false)}
-                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Event Type
-                          </label>
-                          <select
-                            value={newEvent.type}
-                            onChange={(e) => {
-                              const selected = eventTypes.find(
-                                (t) => t.value === e.target.value
-                              );
-                              setNewEvent({
-                                ...newEvent,
-                                type: e.target.value,
-                                impact: selected?.impact || 0,
-                              });
-                            }}
-                            className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
-                          >
-                            {eventTypes.map((type) => (
-                              <option key={type.value} value={type.value}>
-                                {type.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Start Date
-                            </label>
-                            <input
-                              type="date"
-                              value={newEvent.startDate}
-                              onChange={(e) =>
-                                setNewEvent({
-                                  ...newEvent,
-                                  startDate: e.target.value,
-                                })
-                              }
-                              min={forecastLimits.minDate || today}
-                              max={forecastLimits.maxDate || undefined}
-                              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
-                            />
+                <div className={darkMode ? "dark" : ""}>
+                  <>
+                    <div
+                      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
+                      onClick={() => setShowEventModal(false)}
+                    />
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+                      <div className="w-full max-w-lg relative pointer-events-auto">
+                        <Card className="p-6">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              Add Causal Event
+                            </h3>
+                            <button
+                              onClick={() => setShowEventModal(false)}
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
                           </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              End Date (Optional)
-                            </label>
-                            <input
-                              type="date"
-                              value={newEvent.endDate}
-                              onChange={(e) =>
-                                setNewEvent({
-                                  ...newEvent,
-                                  endDate: e.target.value,
-                                })
-                              }
-                              min={
-                                newEvent.startDate ||
-                                forecastLimits.minDate ||
-                                today
-                              }
-                              max={forecastLimits.maxDate || undefined}
-                              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
-                            />
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Event Type
+                              </label>
+                              <select
+                                value={newEvent.type}
+                                onChange={(e) => {
+                                  const selected = eventTypes.find(
+                                    (t) => t.value === e.target.value
+                                  );
+                                  setNewEvent({
+                                    ...newEvent,
+                                    type: e.target.value,
+                                    impact: selected?.impact || 0,
+                                  });
+                                }}
+                                className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
+                              >
+                                {eventTypes.map((type) => (
+                                  <option key={type.value} value={type.value}>
+                                    {type.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                  Start Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={newEvent.startDate}
+                                  onChange={(e) =>
+                                    setNewEvent({
+                                      ...newEvent,
+                                      startDate: e.target.value,
+                                    })
+                                  }
+                                  min={forecastLimits.minDate || today}
+                                  max={forecastLimits.maxDate || undefined}
+                                  className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                  End Date (Optional)
+                                </label>
+                                <input
+                                  type="date"
+                                  value={newEvent.endDate}
+                                  onChange={(e) =>
+                                    setNewEvent({
+                                      ...newEvent,
+                                      endDate: e.target.value,
+                                    })
+                                  }
+                                  min={
+                                    newEvent.startDate ||
+                                    forecastLimits.minDate ||
+                                    today
+                                  }
+                                  max={forecastLimits.maxDate || undefined}
+                                  className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Impact (%)
+                              </label>
+                              <input
+                                type="number"
+                                value={newEvent.impact}
+                                onChange={(e) =>
+                                  setNewEvent({
+                                    ...newEvent,
+                                    impact: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
+                                placeholder="e.g., 25 for +25% or -15 for -15%"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Description (Optional)
+                              </label>
+                              <textarea
+                                value={newEvent.description}
+                                onChange={(e) =>
+                                  setNewEvent({
+                                    ...newEvent,
+                                    description: e.target.value,
+                                  })
+                                }
+                                className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
+                                rows={3}
+                                placeholder="Additional notes about this event..."
+                              />
+                            </div>
+                            <button
+                              onClick={handleAddEvent}
+                              disabled={isLoading}
+                              className="w-full py-2 rounded-xl text-white font-medium transition-all hover:scale-[1.02] disabled:opacity-50"
+                              style={{ backgroundColor: theme.chart }}
+                            >
+                              {isLoading ? "Adding Event..." : "Add Event"}
+                            </button>
                           </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Impact (%)
-                          </label>
-                          <input
-                            type="number"
-                            value={newEvent.impact}
-                            onChange={(e) =>
-                              setNewEvent({
-                                ...newEvent,
-                                impact: Number(e.target.value),
-                              })
-                            }
-                            className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
-                            placeholder="e.g., 25 for +25% or -15 for -15%"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Description (Optional)
-                          </label>
-                          <textarea
-                            value={newEvent.description}
-                            onChange={(e) =>
-                              setNewEvent({
-                                ...newEvent,
-                                description: e.target.value,
-                              })
-                            }
-                            className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
-                            rows={3}
-                            placeholder="Additional notes about this event..."
-                          />
-                        </div>
-                        <button
-                          onClick={handleAddEvent}
-                          disabled={isLoading}
-                          className="w-full py-2 rounded-xl text-white font-medium transition-all hover:scale-[1.02] disabled:opacity-50"
-                          style={{ backgroundColor: theme.chart }}
-                        >
-                          {isLoading ? "Adding Event..." : "Add Event"}
-                        </button>
+                        </Card>
                       </div>
-                    </Card>
-                  </div>
-                </>
+                    </div>
+                  </>
+                </div>
               </Portal>
             )}
 
@@ -2862,74 +2867,106 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 </div>
               )}
 
-              {/* AI Insights */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-purple-200 dark:border-purple-700">
-                <div className="prose prose-purple dark:prose-invert max-w-none">
-                  <div className="text-sm leading-relaxed space-y-4">
-                    {decisionSupport.insights.split("\n").map((line, idx) => {
-                      // Headers
-                      if (line.startsWith("# ")) {
-                        return (
-                          <h2
-                            key={idx}
-                            className="text-xl font-bold mt-6 mb-3 text-purple-900 dark:text-purple-300"
-                          >
-                            {line.substring(2)}
-                          </h2>
-                        );
-                      }
-                      if (line.startsWith("## ")) {
-                        return (
-                          <h3
-                            key={idx}
-                            className="text-lg font-semibold mt-4 mb-2 text-purple-800 dark:text-purple-400"
-                          >
-                            {line.substring(3)}
-                          </h3>
-                        );
-                      }
-                      if (line.startsWith("### ")) {
-                        return (
-                          <h4
-                            key={idx}
-                            className="text-md font-medium mt-3 mb-2 text-purple-700 dark:text-purple-500"
-                          >
-                            {line.substring(4)}
-                          </h4>
-                        );
-                      }
-                      // Bullet points
-                      if (line.startsWith("- ") || line.startsWith("* ")) {
-                        return (
-                          <div
-                            key={idx}
-                            className="flex items-start gap-2 ml-4"
-                          >
-                            <span className="text-purple-600 dark:text-purple-400 mt-1">
-                              •
-                            </span>
-                            <span className="flex-1 text-gray-700 dark:text-gray-300">
-                              {line.substring(2)}
-                            </span>
-                          </div>
-                        );
-                      }
-                      // Regular paragraphs
-                      if (line.trim()) {
-                        return (
-                          <p
-                            key={idx}
-                            className="text-gray-700 dark:text-gray-300"
-                          >
-                            {line}
-                          </p>
-                        );
-                      }
-                      return null;
-                    })}
-                  </div>
+              {/* Expand Button - only show when not expanded */}
+              {!isAISupportExpanded && (
+                <div className="flex justify-center mt-4 mb-4">
+                  <button
+                    onClick={() => setIsAISupportExpanded(true)}
+                    className="px-4 py-2 rounded-lg text-white font-medium transition-all hover:scale-105"
+                    style={{ backgroundColor: theme.chart }}
+                  >
+                    Expand to See Full AI Insights
+                  </button>
                 </div>
-              </div>
+              )}
+
+              {/* AI Insights - Only show when expanded */}
+              {isAISupportExpanded && (
+                <>
+                  <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-purple-200 dark:border-purple-700">
+                    <div className="prose prose-purple dark:prose-invert max-w-none">
+                      <div className="text-sm leading-relaxed space-y-4">
+                        {decisionSupport.insights
+                          .split("\n")
+                          .map((line, idx) => {
+                            // Headers
+                            if (line.startsWith("# ")) {
+                              return (
+                                <h2
+                                  key={idx}
+                                  className="text-xl font-bold mt-6 mb-3 text-purple-900 dark:text-purple-300"
+                                >
+                                  {line.substring(2)}
+                                </h2>
+                              );
+                            }
+                            if (line.startsWith("## ")) {
+                              return (
+                                <h3
+                                  key={idx}
+                                  className="text-lg font-semibold mt-4 mb-2 text-purple-800 dark:text-purple-400"
+                                >
+                                  {line.substring(3)}
+                                </h3>
+                              );
+                            }
+                            if (line.startsWith("### ")) {
+                              return (
+                                <h4
+                                  key={idx}
+                                  className="text-md font-medium mt-3 mb-2 text-purple-700 dark:text-purple-500"
+                                >
+                                  {line.substring(4)}
+                                </h4>
+                              );
+                            }
+                            // Bullet points
+                            if (
+                              line.startsWith("- ") ||
+                              line.startsWith("* ")
+                            ) {
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex items-start gap-2 ml-4"
+                                >
+                                  <span className="text-purple-600 dark:text-purple-400 mt-1">
+                                    •
+                                  </span>
+                                  <span className="flex-1 text-gray-700 dark:text-gray-300">
+                                    {line.substring(2)}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            // Regular paragraphs
+                            if (line.trim()) {
+                              return (
+                                <p
+                                  key={idx}
+                                  className="text-gray-700 dark:text-gray-300"
+                                >
+                                  {line}
+                                </p>
+                              );
+                            }
+                            return null;
+                          })}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Show Less Button at the bottom */}
+                  <div className="flex justify-center mt-4 mb-4">
+                    <button
+                      onClick={() => setIsAISupportExpanded(false)}
+                      className="px-4 py-2 rounded-lg text-white font-medium transition-all hover:scale-105"
+                      style={{ backgroundColor: theme.chart }}
+                    >
+                      Show Less
+                    </button>
+                  </div>
+                </>
+              )}
             </Card>
           )}
 

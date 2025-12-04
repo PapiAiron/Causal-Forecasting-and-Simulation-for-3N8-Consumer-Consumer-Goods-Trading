@@ -1835,7 +1835,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                         startDate: e.target.value,
                                       })
                                     }
-                                    min={today}
+                                    min={forecastLimits.minDate || today}
                                     max={forecastLimits.maxDate || undefined}
                                     className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
                                   />
@@ -1886,7 +1886,11 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                         endDate: e.target.value,
                                       })
                                     }
-                                    min={newEvent.startDate || today}
+                                    min={
+                                      newEvent.startDate ||
+                                      forecastLimits.minDate ||
+                                      today
+                                    }
                                     max={forecastLimits.maxDate || undefined}
                                     className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
                                   />
@@ -3280,7 +3284,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 </div>
 
                 {/* Pagination Controls */}
-                <div className="flex justify-between items-center mt-4">
+                <div className="flex flex-col items-center mt-4 space-y-2">
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {(() => {
                       // Apply search filter
@@ -3312,13 +3316,13 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       return `Showing ${startItem}-${endItem} of ${filteredCauses.length} items`;
                     })()}
                   </div>
-                  <div className="flex space-x-1">
+                  <div className="flex space-x-1 overflow-x-auto w-full justify-center">
                     <button
                       onClick={() =>
                         setStoreDemandPage((prev) => Math.max(prev - 1, 1))
                       }
                       disabled={storeDemandPage === 1}
-                      className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
+                      className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center flex-shrink-0 ${
                         storeDemandPage === 1
                           ? "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"
                           : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-blue-600 dark:hover:bg-blue-600 hover:text-white dark:hover:text-white"
@@ -3370,7 +3374,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                             <button
                               key={displayPage}
                               onClick={() => setStoreDemandPage(displayPage)}
-                              className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
+                              className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center flex-shrink-0 ${
                                 storeDemandPage === displayPage
                                   ? "bg-blue-600 text-white"
                                   : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
@@ -3432,7 +3436,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                         );
                         return storeDemandPage === (totalPages || 1);
                       })()}
-                      className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
+                      className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center flex-shrink-0 ${
                         (() => {
                           // Apply search filter
                           const searchedCauses = storeSearchQuery

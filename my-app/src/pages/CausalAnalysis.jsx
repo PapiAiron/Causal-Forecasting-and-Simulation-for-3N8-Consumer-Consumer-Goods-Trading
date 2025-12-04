@@ -106,8 +106,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [isAISupportExpanded, setIsAISupportExpanded] = useState(false);
   const [tooltipStates, setTooltipStates] = useState({});
   const [storeDemandPage, setStoreDemandPage] = useState(1);
-  const [storeSearchQuery, setStoreSearchQuery] = useState('');
-  const [storeStatusFilter, setStoreStatusFilter] = useState('all');
+  const [storeSearchQuery, setStoreSearchQuery] = useState("");
+  const [storeStatusFilter, setStoreStatusFilter] = useState("all");
   const itemsPerPage = 10;
 
   const toggleTooltip = (field) => {
@@ -3144,7 +3144,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   🏪 Store Demand Analysis & Root Causes
                 </h3>
-                
+
                 {/* Search and Filter Controls */}
                 <div className="flex flex-row items-center gap-4 mb-4">
                   <div className="w-1/3">
@@ -3180,29 +3180,36 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="space-y-3">
                   {(() => {
                     // Apply search filter
                     const searchedCauses = storeSearchQuery
-                      ? storeDemandCauses.causes.filter(cause => 
-                          cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                      ? storeDemandCauses.causes.filter((cause) =>
+                          cause.store
+                            .toLowerCase()
+                            .includes(storeSearchQuery.toLowerCase())
                         )
                       : storeDemandCauses.causes;
-                    
+
                     // Apply status filter
-                    const filteredCauses = storeStatusFilter !== 'all'
-                      ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
-                      : searchedCauses;
-                    
+                    const filteredCauses =
+                      storeStatusFilter !== "all"
+                        ? searchedCauses.filter(
+                            (cause) => cause.status === storeStatusFilter
+                          )
+                        : searchedCauses;
+
                     // Update page count based on filtered results
-                    const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
-                    
+                    const totalPages = Math.ceil(
+                      filteredCauses.length / itemsPerPage
+                    );
+
                     // Ensure current page is valid
                     if (storeDemandPage > totalPages && totalPages > 0) {
                       setStoreDemandPage(totalPages);
                     }
-                    
+
                     return filteredCauses
                       .slice(
                         (storeDemandPage - 1) * itemsPerPage,
@@ -3246,7 +3253,9 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                   Recent Avg:
                                 </span>
                                 <span className="font-semibold ml-1">
-                                  {Math.round(cause.recent_avg).toLocaleString()}
+                                  {Math.round(
+                                    cause.recent_avg
+                                  ).toLocaleString()}
                                 </span>
                               </div>
                               <div>
@@ -3254,7 +3263,9 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                   Overall Avg:
                                 </span>
                                 <span className="font-semibold ml-1">
-                                  {Math.round(cause.overall_avg).toLocaleString()}
+                                  {Math.round(
+                                    cause.overall_avg
+                                  ).toLocaleString()}
                                 </span>
                               </div>
                               <div>
@@ -3271,32 +3282,45 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       });
                   })()}
                 </div>
-                
+
                 {/* Pagination Controls */}
                 <div className="flex justify-between items-center mt-4">
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {(() => {
                       // Apply search filter
                       const searchedCauses = storeSearchQuery
-                        ? storeDemandCauses.causes.filter(cause => 
-                            cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                        ? storeDemandCauses.causes.filter((cause) =>
+                            cause.store
+                              .toLowerCase()
+                              .includes(storeSearchQuery.toLowerCase())
                           )
                         : storeDemandCauses.causes;
-                      
+
                       // Apply status filter
-                      const filteredCauses = storeStatusFilter !== 'all'
-                        ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
-                        : searchedCauses;
-                      
-                      const startItem = Math.min((storeDemandPage - 1) * itemsPerPage + 1, filteredCauses.length);
-                      const endItem = Math.min(storeDemandPage * itemsPerPage, filteredCauses.length);
-                      
+                      const filteredCauses =
+                        storeStatusFilter !== "all"
+                          ? searchedCauses.filter(
+                              (cause) => cause.status === storeStatusFilter
+                            )
+                          : searchedCauses;
+
+                      const startItem = Math.min(
+                        (storeDemandPage - 1) * itemsPerPage + 1,
+                        filteredCauses.length
+                      );
+                      const endItem = Math.min(
+                        storeDemandPage * itemsPerPage,
+                        filteredCauses.length
+                      );
+
                       return `Showing ${startItem}-${endItem} of ${filteredCauses.length} items`;
                     })()}
                   </div>
                   <div className="flex space-x-1">
                     <button
-                      onClick={() => setStoreDemandPage(prev => Math.max(prev - 1, 1))}
+                      onClick={() =>
+                        setStoreDemandPage((prev) => Math.max(prev - 1, 1))
+                      }
                       disabled={storeDemandPage === 1}
                       className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
                         storeDemandPage === 1
@@ -3306,101 +3330,134 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     >
                       &lt;
                     </button>
-                    
+
                     {(() => {
                       // Apply search filter
                       const searchedCauses = storeSearchQuery
-                        ? storeDemandCauses.causes.filter(cause => 
-                            cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                        ? storeDemandCauses.causes.filter((cause) =>
+                            cause.store
+                              .toLowerCase()
+                              .includes(storeSearchQuery.toLowerCase())
                           )
                         : storeDemandCauses.causes;
-                      
+
                       // Apply status filter
-                      const filteredCauses = storeStatusFilter !== 'all'
-                        ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
-                        : searchedCauses;
-                      
-                      const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
-                      
-                      return Array.from({ length: Math.min(5, totalPages || 1) }, (_, i) => {
-                        const pageNum = i + 1;
-                        let displayPage = pageNum;
-                        
-                        // Show first, last, and pages around current page
-                        if (totalPages > 5) {
-                          if (storeDemandPage <= 3) {
-                            displayPage = pageNum;
-                          } else if (storeDemandPage >= totalPages - 2) {
-                            displayPage = totalPages - 4 + i;
-                          } else {
-                            displayPage = storeDemandPage - 2 + i;
-                          }
-                        }
-                        
-                        return (
-                          <button
-                            key={displayPage}
-                            onClick={() => setStoreDemandPage(displayPage)}
-                            className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
-                              storeDemandPage === displayPage
-                                ? "bg-blue-600 text-white"
-                                : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                            }`}
-                          >
-                            {displayPage}
-                          </button>
-                        );
-                      });
-                    })()}
-                    
-                    <button
-                      onClick={() => setStoreDemandPage(prev => {
-                        // Apply search filter
-                        const searchedCauses = storeSearchQuery
-                          ? storeDemandCauses.causes.filter(cause => 
-                              cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                      const filteredCauses =
+                        storeStatusFilter !== "all"
+                          ? searchedCauses.filter(
+                              (cause) => cause.status === storeStatusFilter
                             )
-                          : storeDemandCauses.causes;
-                        
-                        // Apply status filter
-                        const filteredCauses = storeStatusFilter !== 'all'
-                          ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
                           : searchedCauses;
-                        
-                        const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
-                        return Math.min(prev + 1, totalPages || 1);
-                      })}
+
+                      const totalPages = Math.ceil(
+                        filteredCauses.length / itemsPerPage
+                      );
+
+                      return Array.from(
+                        { length: Math.min(5, totalPages || 1) },
+                        (_, i) => {
+                          const pageNum = i + 1;
+                          let displayPage = pageNum;
+
+                          // Show first, last, and pages around current page
+                          if (totalPages > 5) {
+                            if (storeDemandPage <= 3) {
+                              displayPage = pageNum;
+                            } else if (storeDemandPage >= totalPages - 2) {
+                              displayPage = totalPages - 4 + i;
+                            } else {
+                              displayPage = storeDemandPage - 2 + i;
+                            }
+                          }
+
+                          return (
+                            <button
+                              key={displayPage}
+                              onClick={() => setStoreDemandPage(displayPage)}
+                              className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
+                                storeDemandPage === displayPage
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                              }`}
+                            >
+                              {displayPage}
+                            </button>
+                          );
+                        }
+                      );
+                    })()}
+
+                    <button
+                      onClick={() =>
+                        setStoreDemandPage((prev) => {
+                          // Apply search filter
+                          const searchedCauses = storeSearchQuery
+                            ? storeDemandCauses.causes.filter((cause) =>
+                                cause.store
+                                  .toLowerCase()
+                                  .includes(storeSearchQuery.toLowerCase())
+                              )
+                            : storeDemandCauses.causes;
+
+                          // Apply status filter
+                          const filteredCauses =
+                            storeStatusFilter !== "all"
+                              ? searchedCauses.filter(
+                                  (cause) => cause.status === storeStatusFilter
+                                )
+                              : searchedCauses;
+
+                          const totalPages = Math.ceil(
+                            filteredCauses.length / itemsPerPage
+                          );
+                          return Math.min(prev + 1, totalPages || 1);
+                        })
+                      }
                       disabled={(() => {
                         // Apply search filter
                         const searchedCauses = storeSearchQuery
-                          ? storeDemandCauses.causes.filter(cause => 
-                              cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                          ? storeDemandCauses.causes.filter((cause) =>
+                              cause.store
+                                .toLowerCase()
+                                .includes(storeSearchQuery.toLowerCase())
                             )
                           : storeDemandCauses.causes;
-                        
+
                         // Apply status filter
-                        const filteredCauses = storeStatusFilter !== 'all'
-                          ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
-                          : searchedCauses;
-                        
-                        const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
+                        const filteredCauses =
+                          storeStatusFilter !== "all"
+                            ? searchedCauses.filter(
+                                (cause) => cause.status === storeStatusFilter
+                              )
+                            : searchedCauses;
+
+                        const totalPages = Math.ceil(
+                          filteredCauses.length / itemsPerPage
+                        );
                         return storeDemandPage === (totalPages || 1);
                       })()}
                       className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
                         (() => {
                           // Apply search filter
                           const searchedCauses = storeSearchQuery
-                            ? storeDemandCauses.causes.filter(cause => 
-                                cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                            ? storeDemandCauses.causes.filter((cause) =>
+                                cause.store
+                                  .toLowerCase()
+                                  .includes(storeSearchQuery.toLowerCase())
                               )
                             : storeDemandCauses.causes;
-                          
+
                           // Apply status filter
-                          const filteredCauses = storeStatusFilter !== 'all'
-                            ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
-                            : searchedCauses;
-                          
-                          const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
+                          const filteredCauses =
+                            storeStatusFilter !== "all"
+                              ? searchedCauses.filter(
+                                  (cause) => cause.status === storeStatusFilter
+                                )
+                              : searchedCauses;
+
+                          const totalPages = Math.ceil(
+                            filteredCauses.length / itemsPerPage
+                          );
                           return storeDemandPage === (totalPages || 1);
                         })()
                           ? "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"

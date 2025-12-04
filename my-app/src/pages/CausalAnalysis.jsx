@@ -682,7 +682,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     try {
       const causalForm = new FormData();
       causalForm.append("file", uploadedFile);
-      const causalRes = await fetch("http://127.0.0.1:5000/causal-analysis", {
+      const causalRes = await fetch(API_ENDPOINTS.CAUSAL_ANALYSIS, {
         method: "POST",
         body: causalForm,
       });
@@ -703,7 +703,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       const forecastForm = new FormData();
       forecastForm.append("file", uploadedFile);
       forecastForm.append("days", "365");
-      const forecastRes = await fetch("http://127.0.0.1:5000/forecast", {
+      const forecastRes = await fetch(API_ENDPOINTS.FORECAST, {
         method: "POST",
         body: forecastForm,
       });
@@ -939,17 +939,17 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     // Fetch all reports in parallel
     try {
       const results = await Promise.all([
-        fetch("http://127.0.0.1:5000/store-analytics", {
+        fetch(API_ENDPOINTS.STORE_ANALYTICS, {
           method: "POST",
           body: forecastForm,
         }).then((res) => (res.ok ? res.json() : null)),
 
-        fetch("http://127.0.0.1:5000/causal-factors-report", {
+        fetch(API_ENDPOINTS.CAUSAL_FACTORS, {
           method: "POST",
           body: forecastForm,
         }).then((res) => (res.ok ? res.json() : null)),
 
-        fetch("http://127.0.0.1:5000/full-reports", {
+        fetch(API_ENDPOINTS.FULL_REPORTS, {
           method: "POST",
           body: forecastForm,
         }).then((res) => (res.ok ? res.json() : null)),
@@ -2091,8 +2091,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
                       return (
                         <>
-                          <div className="w-full" style={{ minHeight: 280, height: "auto" }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                          <div className="w-full" style={{ height: 350 }}>
+                            <ResponsiveContainer width="100%" height={350}>
                               <ComposedChart
                                 data={chartData}
                                 margin={{
@@ -2396,8 +2396,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
                     {displayData.some((d) => d.actual !== null) ? (
                       <>
-                        <div className="w-full" style={{ minHeight: 280, height: "auto" }}>
-                          <ResponsiveContainer width="100%" height="100%">
+                        <div className="w-full" style={{ height: 350 }}>
+                          <ResponsiveContainer width="100%" height={350}>
                             <ComposedChart
                               data={displayData.filter(
                                 (d) => d.actual !== null

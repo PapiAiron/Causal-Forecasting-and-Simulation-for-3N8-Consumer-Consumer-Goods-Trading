@@ -12,6 +12,8 @@ import {
   Gift,
   AlertTriangle,
   ChevronDown,
+  Calendar,
+  Info,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -102,6 +104,41 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [customEndDate, setCustomEndDate] = useState("");
   const [isQuerying, setIsQuerying] = useState(false);
   const [isAISupportExpanded, setIsAISupportExpanded] = useState(false);
+  const [tooltipStates, setTooltipStates] = useState({});
+
+  const toggleTooltip = (field) => {
+    setTooltipStates((prev) => {
+      // If this tooltip is already open, close it
+      if (prev[field]) {
+        return {
+          ...prev,
+          [field]: false,
+        };
+      }
+      // Otherwise, close all tooltips and open this one
+      return {
+        [field]: true,
+      };
+    });
+  };
+
+  // Close all tooltips when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Check if the click is not on an info icon or tooltip
+      if (
+        !event.target.closest(".info-tooltip-trigger") &&
+        !event.target.closest(".tooltip-content")
+      ) {
+        setTooltipStates({});
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
   // Monitor authentication state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1718,14 +1755,30 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                               onClick={() => setShowEventModal(false)}
                               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                             >
-                              <X className="w-5 h-5" />
+                              <X className="w-5 h-5 text-gray-900 dark:text-blue-400" />
                             </button>
                           </div>
                           <div className="space-y-4">
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Event Type
-                              </label>
+                              <div className="flex items-center mb-2 relative">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Event Type
+                                </label>
+                                <button
+                                  type="button"
+                                  className="ml-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 info-tooltip-trigger"
+                                  onClick={() => toggleTooltip("eventType")}
+                                >
+                                  <Info className="w-4 h-4" />
+                                </button>
+                                {tooltipStates.eventType && (
+                                  <div className="absolute z-10 left-0 top-full mt-1 w-64 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 tooltip-content">
+                                    Select the type of event that will impact
+                                    your sales forecast. Each event type has a
+                                    predefined impact percentage.
+                                  </div>
+                                )}
+                              </div>
                               <select
                                 value={newEvent.type}
                                 onChange={(e) => {
@@ -1749,50 +1802,132 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Start Date
-                                </label>
-                                <input
-                                  type="date"
-                                  value={newEvent.startDate}
-                                  onChange={(e) =>
-                                    setNewEvent({
-                                      ...newEvent,
-                                      startDate: e.target.value,
-                                    })
-                                  }
-                                  min={forecastLimits.minDate || today}
-                                  max={forecastLimits.maxDate || undefined}
-                                  className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
-                                />
+                                <div className="flex items-center mb-2 relative">
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Start Date
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="ml-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 info-tooltip-trigger"
+                                    onClick={() => toggleTooltip("startDate")}
+                                  >
+                                    <Info className="w-4 h-4" />
+                                  </button>
+                                  {tooltipStates.startDate && (
+                                    <div className="absolute z-10 left-0 top-full mt-1 w-64 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 tooltip-content">
+                                      Select the start date for this event. The
+                                      event will begin affecting your sales
+                                      forecast from this date onwards.
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="relative">
+                                  <input
+                                    type="date"
+                                    value={newEvent.startDate}
+                                    onChange={(e) =>
+                                      setNewEvent({
+                                        ...newEvent,
+                                        startDate: e.target.value,
+                                      })
+                                    }
+                                    min={forecastLimits.minDate || today}
+                                    max={forecastLimits.maxDate || undefined}
+                                    className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      const input = e.target
+                                        .closest(".relative")
+                                        .querySelector('input[type="date"]');
+                                      if (input && input.showPicker) {
+                                        input.showPicker();
+                                      }
+                                    }}
+                                  >
+                                    <Calendar className="w-5 h-5" />
+                                  </button>
+                                </div>
                               </div>
                               <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  End Date (Optional)
-                                </label>
-                                <input
-                                  type="date"
-                                  value={newEvent.endDate}
-                                  onChange={(e) =>
-                                    setNewEvent({
-                                      ...newEvent,
-                                      endDate: e.target.value,
-                                    })
-                                  }
-                                  min={
-                                    newEvent.startDate ||
-                                    forecastLimits.minDate ||
-                                    today
-                                  }
-                                  max={forecastLimits.maxDate || undefined}
-                                  className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
-                                />
+                                <div className="flex items-center mb-2 relative">
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    End Date (Optional)
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="ml-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 info-tooltip-trigger"
+                                    onClick={() => toggleTooltip("endDate")}
+                                  >
+                                    <Info className="w-4 h-4" />
+                                  </button>
+                                  {tooltipStates.endDate && (
+                                    <div className="absolute z-10 left-0 top-full mt-1 w-64 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 tooltip-content">
+                                      Optionally select an end date for this
+                                      event. If left blank, the event will be
+                                      considered a one-day event.
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="relative">
+                                  <input
+                                    type="date"
+                                    value={newEvent.endDate}
+                                    onChange={(e) =>
+                                      setNewEvent({
+                                        ...newEvent,
+                                        endDate: e.target.value,
+                                      })
+                                    }
+                                    min={
+                                      newEvent.startDate ||
+                                      forecastLimits.minDate ||
+                                      today
+                                    }
+                                    max={forecastLimits.maxDate || undefined}
+                                    className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      const input = e.target
+                                        .closest(".relative")
+                                        .querySelector('input[type="date"]');
+                                      if (input && input.showPicker) {
+                                        input.showPicker();
+                                      }
+                                    }}
+                                  >
+                                    <Calendar className="w-5 h-5" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Impact (%)
-                              </label>
+                              <div className="flex items-center mb-2 relative">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Impact (%)
+                                </label>
+                                <button
+                                  type="button"
+                                  className="ml-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 info-tooltip-trigger"
+                                  onClick={() => toggleTooltip("impact")}
+                                >
+                                  <Info className="w-4 h-4" />
+                                </button>
+                                {tooltipStates.impact && (
+                                  <div className="absolute z-10 left-0 top-full mt-1 w-64 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 tooltip-content">
+                                    Enter the expected impact of this event on
+                                    sales as a percentage. Use positive values
+                                    for increases and negative for decreases.
+                                  </div>
+                                )}
+                              </div>
                               <input
                                 type="number"
                                 value={newEvent.impact}
@@ -1807,9 +1942,25 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                               />
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Description (Optional)
-                              </label>
+                              <div className="flex items-center mb-2 relative">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Description (Optional)
+                                </label>
+                                <button
+                                  type="button"
+                                  className="ml-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 info-tooltip-trigger"
+                                  onClick={() => toggleTooltip("description")}
+                                >
+                                  <Info className="w-4 h-4" />
+                                </button>
+                                {tooltipStates.description && (
+                                  <div className="absolute z-10 left-0 top-full mt-1 w-64 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 tooltip-content">
+                                    Optionally add a description to provide more
+                                    context about this event for future
+                                    reference.
+                                  </div>
+                                )}
+                              </div>
                               <textarea
                                 value={newEvent.description}
                                 onChange={(e) =>
@@ -1839,6 +1990,17 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 </div>
               </Portal>
             )}
+            <style jsx>{`
+              input.hide-calendar-icon::-webkit-calendar-picker-indicator {
+                display: none !important;
+              }
+              input.hide-calendar-icon::-moz-calendar-picker-indicator {
+                display: none !important;
+              }
+              input.hide-calendar-icon::-ms-calendar-picker-indicator {
+                display: none !important;
+              }
+            `}</style>
 
             {/* Row 1: Two Charts Side by Side - FLEXBOX VERSION */}
             {displayData.length > 0 && (

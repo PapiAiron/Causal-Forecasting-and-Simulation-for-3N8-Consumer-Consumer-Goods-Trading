@@ -17,9 +17,13 @@
     "firebase": "^12.6.0",
     "framer-motion": "^12.23.25",
     "googleapis": "^166.0.0",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.544.0",
+    "maplibre-gl": "^5.14.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-leaflet": "^5.0.0",
+    "react-map-gl": "^8.1.0",
     "react-router-dom": "^7.9.6",
     "recharts": "^3.5.1",
     "ws": "^8.18.3"

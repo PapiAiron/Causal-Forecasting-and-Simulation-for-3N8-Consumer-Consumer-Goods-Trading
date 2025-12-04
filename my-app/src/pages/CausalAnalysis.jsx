@@ -812,7 +812,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   onClick={() => setShowEventModal(false)} 
                 />
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
-                  <Card className="w-full max-w-lg p-6 relative pointer-events-auto">``
+                  <Card className="w-full max-w-lg p-6 relative pointer-events-auto">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Causal Event</h3>
                         <button

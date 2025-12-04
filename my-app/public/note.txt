@@ -11,6 +11,7 @@ npm install react-router-dom recharts lucide-react
    npm install -D tailwindcss postcss autoprefixer
    npx tailwindcss init -p
    npm install framer-motion
+   npm install leaflet react-leaflet
 
    
    npm install express ws googleapis cors

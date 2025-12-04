@@ -15,6 +15,7 @@ flask-cors==6.0.1
 fonttools==4.59.1
 fsspec==2025.10.0
 guidata==3.12.0
+gunicorn==23.0.0
 h5py==3.14.0
 holidays==0.80
 huggingface-hub==0.27.1

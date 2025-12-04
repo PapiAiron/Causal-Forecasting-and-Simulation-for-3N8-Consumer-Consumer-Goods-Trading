@@ -105,6 +105,10 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const [isQuerying, setIsQuerying] = useState(false);
   const [isAISupportExpanded, setIsAISupportExpanded] = useState(false);
   const [tooltipStates, setTooltipStates] = useState({});
+  const [storeDemandPage, setStoreDemandPage] = useState(1);
+  const [storeSearchQuery, setStoreSearchQuery] = useState('');
+  const [storeStatusFilter, setStoreStatusFilter] = useState('all');
+  const itemsPerPage = 10;
 
   const toggleTooltip = (field) => {
     setTooltipStates((prev) => {
@@ -3140,68 +3144,272 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   🏪 Store Demand Analysis & Root Causes
                 </h3>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {storeDemandCauses.causes.map((cause, idx) => {
-                    const statusColors = {
-                      stopped:
-                        "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20",
-                      critical:
-                        "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20",
-                      warning:
-                        "border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20",
-                      variable:
-                        "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20",
-                      good: "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20",
-                      stable:
-                        "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800",
-                    };
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-4 rounded-lg border-2 ${
-                          statusColors[cause.status] || statusColors.stable
-                        }`}
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="font-semibold text-gray-900 dark:text-white">
-                            {cause.store}
+                
+                {/* Search and Filter Controls */}
+                <div className="flex flex-row items-center gap-4 mb-4">
+                  <div className="w-1/3">
+                    <select
+                      value={storeStatusFilter}
+                      onChange={(e) => {
+                        setStoreStatusFilter(e.target.value);
+                        setStoreDemandPage(1); // Reset to first page when filtering
+                      }}
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="stopped">Stopped</option>
+                      <option value="critical">Critical</option>
+                      <option value="warning">Warning</option>
+                      <option value="variable">Variable</option>
+                      <option value="good">Good</option>
+                      <option value="stable">Stable</option>
+                    </select>
+                  </div>
+                  <div className="w-2/3">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search stores..."
+                        value={storeSearchQuery}
+                        onChange={(e) => {
+                          setStoreSearchQuery(e.target.value);
+                          setStoreDemandPage(1); // Reset to first page when searching
+                        }}
+                        className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:border-transparent text-gray-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  {(() => {
+                    // Apply search filter
+                    const searchedCauses = storeSearchQuery
+                      ? storeDemandCauses.causes.filter(cause => 
+                          cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                        )
+                      : storeDemandCauses.causes;
+                    
+                    // Apply status filter
+                    const filteredCauses = storeStatusFilter !== 'all'
+                      ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
+                      : searchedCauses;
+                    
+                    // Update page count based on filtered results
+                    const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
+                    
+                    // Ensure current page is valid
+                    if (storeDemandPage > totalPages && totalPages > 0) {
+                      setStoreDemandPage(totalPages);
+                    }
+                    
+                    return filteredCauses
+                      .slice(
+                        (storeDemandPage - 1) * itemsPerPage,
+                        storeDemandPage * itemsPerPage
+                      )
+                      .map((cause, idx) => {
+                        const statusColors = {
+                          stopped:
+                            "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20",
+                          critical:
+                            "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20",
+                          warning:
+                            "border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20",
+                          variable:
+                            "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20",
+                          good: "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20",
+                          stable:
+                            "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800",
+                        };
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-4 rounded-lg border-2 ${
+                              statusColors[cause.status] || statusColors.stable
+                            }`}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="font-semibold text-gray-900 dark:text-white">
+                                {cause.store}
+                              </div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">
+                                {cause.total_orders} orders
+                              </div>
+                            </div>
+                            <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                              {cause.cause}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Recent Avg:
+                                </span>
+                                <span className="font-semibold ml-1">
+                                  {Math.round(cause.recent_avg).toLocaleString()}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Overall Avg:
+                                </span>
+                                <span className="font-semibold ml-1">
+                                  {Math.round(cause.overall_avg).toLocaleString()}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Last Order:
+                                </span>
+                                <span className="font-semibold ml-1">
+                                  {cause.days_since_last_order}d ago
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {cause.total_orders} orders
-                          </div>
-                        </div>
-                        <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                          {cause.cause}
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 text-xs">
-                          <div>
-                            <span className="text-gray-600 dark:text-gray-400">
-                              Recent Avg:
-                            </span>
-                            <span className="font-semibold ml-1">
-                              {Math.round(cause.recent_avg).toLocaleString()}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600 dark:text-gray-400">
-                              Overall Avg:
-                            </span>
-                            <span className="font-semibold ml-1">
-                              {Math.round(cause.overall_avg).toLocaleString()}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600 dark:text-gray-400">
-                              Last Order:
-                            </span>
-                            <span className="font-semibold ml-1">
-                              {cause.days_since_last_order}d ago
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      });
+                  })()}
+                </div>
+                
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-4">
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {(() => {
+                      // Apply search filter
+                      const searchedCauses = storeSearchQuery
+                        ? storeDemandCauses.causes.filter(cause => 
+                            cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                          )
+                        : storeDemandCauses.causes;
+                      
+                      // Apply status filter
+                      const filteredCauses = storeStatusFilter !== 'all'
+                        ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
+                        : searchedCauses;
+                      
+                      const startItem = Math.min((storeDemandPage - 1) * itemsPerPage + 1, filteredCauses.length);
+                      const endItem = Math.min(storeDemandPage * itemsPerPage, filteredCauses.length);
+                      
+                      return `Showing ${startItem}-${endItem} of ${filteredCauses.length} items`;
+                    })()}
+                  </div>
+                  <div className="flex space-x-1">
+                    <button
+                      onClick={() => setStoreDemandPage(prev => Math.max(prev - 1, 1))}
+                      disabled={storeDemandPage === 1}
+                      className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
+                        storeDemandPage === 1
+                          ? "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-blue-600 dark:hover:bg-blue-600 hover:text-white dark:hover:text-white"
+                      }`}
+                    >
+                      &lt;
+                    </button>
+                    
+                    {(() => {
+                      // Apply search filter
+                      const searchedCauses = storeSearchQuery
+                        ? storeDemandCauses.causes.filter(cause => 
+                            cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                          )
+                        : storeDemandCauses.causes;
+                      
+                      // Apply status filter
+                      const filteredCauses = storeStatusFilter !== 'all'
+                        ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
+                        : searchedCauses;
+                      
+                      const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
+                      
+                      return Array.from({ length: Math.min(5, totalPages || 1) }, (_, i) => {
+                        const pageNum = i + 1;
+                        let displayPage = pageNum;
+                        
+                        // Show first, last, and pages around current page
+                        if (totalPages > 5) {
+                          if (storeDemandPage <= 3) {
+                            displayPage = pageNum;
+                          } else if (storeDemandPage >= totalPages - 2) {
+                            displayPage = totalPages - 4 + i;
+                          } else {
+                            displayPage = storeDemandPage - 2 + i;
+                          }
+                        }
+                        
+                        return (
+                          <button
+                            key={displayPage}
+                            onClick={() => setStoreDemandPage(displayPage)}
+                            className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
+                              storeDemandPage === displayPage
+                                ? "bg-blue-600 text-white"
+                                : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                            }`}
+                          >
+                            {displayPage}
+                          </button>
+                        );
+                      });
+                    })()}
+                    
+                    <button
+                      onClick={() => setStoreDemandPage(prev => {
+                        // Apply search filter
+                        const searchedCauses = storeSearchQuery
+                          ? storeDemandCauses.causes.filter(cause => 
+                              cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                            )
+                          : storeDemandCauses.causes;
+                        
+                        // Apply status filter
+                        const filteredCauses = storeStatusFilter !== 'all'
+                          ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
+                          : searchedCauses;
+                        
+                        const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
+                        return Math.min(prev + 1, totalPages || 1);
+                      })}
+                      disabled={(() => {
+                        // Apply search filter
+                        const searchedCauses = storeSearchQuery
+                          ? storeDemandCauses.causes.filter(cause => 
+                              cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                            )
+                          : storeDemandCauses.causes;
+                        
+                        // Apply status filter
+                        const filteredCauses = storeStatusFilter !== 'all'
+                          ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
+                          : searchedCauses;
+                        
+                        const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
+                        return storeDemandPage === (totalPages || 1);
+                      })()}
+                      className={`w-8 h-8 rounded-md text-sm font-medium flex items-center justify-center ${
+                        (() => {
+                          // Apply search filter
+                          const searchedCauses = storeSearchQuery
+                            ? storeDemandCauses.causes.filter(cause => 
+                                cause.store.toLowerCase().includes(storeSearchQuery.toLowerCase())
+                              )
+                            : storeDemandCauses.causes;
+                          
+                          // Apply status filter
+                          const filteredCauses = storeStatusFilter !== 'all'
+                            ? searchedCauses.filter(cause => cause.status === storeStatusFilter)
+                            : searchedCauses;
+                          
+                          const totalPages = Math.ceil(filteredCauses.length / itemsPerPage);
+                          return storeDemandPage === (totalPages || 1);
+                        })()
+                          ? "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-blue-600 dark:hover:bg-blue-600 hover:text-white dark:hover:text-white"
+                      }`}
+                    >
+                      &gt;
+                    </button>
+                  </div>
                 </div>
               </Card>
             )}

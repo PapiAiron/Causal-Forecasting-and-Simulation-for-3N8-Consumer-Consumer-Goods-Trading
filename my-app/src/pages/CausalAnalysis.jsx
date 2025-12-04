@@ -1835,7 +1835,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                         startDate: e.target.value,
                                       })
                                     }
-                                    min={forecastLimits.minDate || today}
+                                    min={today}
                                     max={forecastLimits.maxDate || undefined}
                                     className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
                                   />
@@ -1886,11 +1886,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                         endDate: e.target.value,
                                       })
                                     }
-                                    min={
-                                      newEvent.startDate ||
-                                      forecastLimits.minDate ||
-                                      today
-                                    }
+                                    min={newEvent.startDate || today}
                                     max={forecastLimits.maxDate || undefined}
                                     className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
                                   />

@@ -14,8 +14,9 @@ app = Flask(__name__)
 CORS(app, origins=[
     "https://causalforecastingandsimulation.web.app",
     "https://causalforecastingandsimulation.firebaseapp.com",
-    "http://localhost:3000",  # For local development
-    "http://localhost:5173"   # For Vite dev server
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://your-frontend-name.onrender.com"  # ⭐ ADD YOUR FRONTEND URL
 ], supports_credentials=True)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "prophet_sales_forecast.pkl")

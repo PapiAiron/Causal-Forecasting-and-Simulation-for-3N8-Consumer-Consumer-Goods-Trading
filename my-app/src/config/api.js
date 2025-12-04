@@ -1,5 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
 
+// Debug log to verify correct URL is being used
+console.log('🌐 Environment:', import.meta.env.MODE);
+console.log('🔗 API Base URL:', API_BASE_URL);
+
 export const API_ENDPOINTS = {
   CAUSAL_ANALYSIS: `${API_BASE_URL}/causal-analysis`,
   FORECAST: `${API_BASE_URL}/forecast`,

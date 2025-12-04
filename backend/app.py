@@ -16,7 +16,9 @@ CORS(app, origins=[
     "https://causalforecastingandsimulation.firebaseapp.com",
     "http://localhost:3000",
     "http://localhost:5173",
-    "https://your-frontend-name.onrender.com"  # ⭐ ADD YOUR FRONTEND URL
+    "https://causal-forecasting-and-simulation-for-3n8.onrender.com",  # ⭐ ADD YOUR ACTUAL RENDER FRONTEND URL
+    "http://127.0.0.1:5173",    
+    "http://127.0.0.1:3000"
 ], supports_credentials=True)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "prophet_sales_forecast.pkl")

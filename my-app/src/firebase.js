@@ -18,5 +18,5 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app); // Firestore instead of Realtime Database
-export const realtimeDb = getDatabase(app); // Keep this if you still need Realtime Database
+export const db = getFirestore(app);
+export const realtimeDb = getDatabase(app);

@@ -1610,7 +1610,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
                   <div>
                     <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">
-                      Data Upload & Analysis
+                      Data Upload & Analysiss
                     </h2>
                     <p className="text-center text-sm text-gray-600 dark:text-gray-400">
                       Upload historical sales data

@@ -34,7 +34,7 @@ import { auth, db } from "../firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth"; // ⭐ ADD THIS LINE
 import { createPortal } from "react-dom";
-
+import { API_ENDPOINTS } from '../config/api';
 export function Portal({ children }) {
   return createPortal(children, document.body);
 }
@@ -224,6 +224,15 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
             setCategoryAnalysis(analysis.categoryAnalysis);
           if (analysis.storeDemandCauses)
             setStoreDemandCauses(analysis.storeDemandCauses);
+          const missingInsights = !analysis.decisionSupport || !analysis.categoryAnalysis || !analysis.storeDemandCauses;
+        if (missingInsights && data.fileName) {
+          console.log("⚠️ AI insights incomplete, will regenerate on next file upload");
+          // Set a flag to regenerate on next interaction
+          setTimeout(() => {
+            setUploadStatus("⚠️ AI insights need updating. Re-upload file to refresh.");
+          }, 2000);
+        }
+      
         }
 
         // Restore file metadata
@@ -283,7 +292,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       const form = new FormData();
       form.append("file", uploadedFile);
 
-      const res = await fetch("http://127.0.0.1:5000/decision-support", {
+      const res = await fetch(API_ENDPOINTS.DECISION_SUPPORT, {
         method: "POST",
         body: form,
       });
@@ -327,7 +336,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       const form = new FormData();
       form.append("file", uploadedFile);
 
-      const res = await fetch("http://127.0.0.1:5000/category-analysis", {
+      const res = await fetch(API_ENDPOINTS.CATEGORY_ANALYSIS, {
         method: "POST",
         body: form,
       });
@@ -369,7 +378,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       const form = new FormData();
       form.append("file", uploadedFile);
 
-      const res = await fetch("http://127.0.0.1:5000/store-demand-causes", {
+      const res = await fetch(API_ENDPOINTS.STORE_DEMAND_CAUSES, {
         method: "POST",
         body: form,
       });
@@ -422,7 +431,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         (async () => {
           const form = new FormData();
           form.append("file", file);
-          const res = await fetch("http://127.0.0.1:5000/decision-support", {
+          const res = await fetch(API_ENDPOINTS.DECISION_SUPPORT, {
             method: "POST",
             body: form,
           });
@@ -432,7 +441,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         (async () => {
           const form = new FormData();
           form.append("file", file);
-          const res = await fetch("http://127.0.0.1:5000/category-analysis", {
+          const res = await fetch(API_ENDPOINTS.CATEGORY_ANALYSIS, {
             method: "POST",
             body: form,
           });
@@ -442,7 +451,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         (async () => {
           const form = new FormData();
           form.append("file", file);
-          const res = await fetch("http://127.0.0.1:5000/store-demand-causes", {
+          const res = await fetch(API_ENDPOINTS.STORE_DEMAND_CAUSES, {
             method: "POST",
             body: form,
           });
@@ -493,6 +502,25 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
   const today = new Date().toISOString().split("T")[0];
 
+  const getHistoricalDataLimits = () => {
+    if (!scenarioGraph?.rows?.length) return { minDate: null, maxDate: null };
+    
+    const historicalRows = scenarioGraph.rows.filter(
+      (row) => row.actual !== null && row.actual !== undefined
+    );
+    
+    if (!historicalRows.length) return { minDate: null, maxDate: null };
+    
+    const dates = historicalRows.map(row => new Date(row.ds.split('T')[0]));
+    const minDate = new Date(Math.min(...dates));
+    const maxDate = new Date(Math.max(...dates));
+    
+    return {
+      minDate: minDate.toISOString().split('T')[0],
+      maxDate: maxDate.toISOString().split('T')[0]
+    };
+  };
+
   const getForecastPeriodLimits = () => {
     if (!scenarioGraph?.rows?.length) return { minDate: today, maxDate: null };
     const forecastRows = scenarioGraph.rows.filter(
@@ -509,6 +537,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   };
 
   const forecastLimits = getForecastPeriodLimits();
+  const historicalLimits = getHistoricalDataLimits();
 
   const eventTypes = [
     {
@@ -555,6 +584,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
     },
   ];
 
+
+
   // Add this helper function RIGHT AFTER eventTypes
   const getIconComponent = (iconName) => {
     const iconMap = {
@@ -600,7 +631,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       const form = new FormData();
       form.append("file", uploadedFile);
 
-      const res = await fetch("http://127.0.0.1:5000/store-analytics", {
+      const res = await fetch(API_ENDPOINTS.STORE_ANALYTICS, {
         method: "POST",
         body: form,
       });
@@ -626,7 +657,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
       form.append("file", uploadedFile);
       form.append("period", period);
 
-      const res = await fetch("http://127.0.0.1:5000/reporting", {
+      const res = await fetch(API_ENDPOINTS.FULL_REPORTS, {
         method: "POST",
         body: form,
       });
@@ -1067,15 +1098,17 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
   const handleAddEvent = async () => {
     if (!newEvent.startDate) return alert("Please select a start date");
 
-    const { minDate, maxDate } = forecastLimits;
-    if (minDate && newEvent.startDate < minDate)
-      return alert(`Start date must be on or after ${minDate}`);
-    if (maxDate && newEvent.startDate > maxDate)
-      return alert(`Start date must be on or before ${maxDate}`);
-    if (newEvent.endDate && minDate && newEvent.endDate < minDate)
-      return alert(`End date must be on or after ${minDate}`);
-    if (newEvent.endDate && maxDate && newEvent.endDate > maxDate)
-      return alert(`End date must be on or before ${maxDate}`);
+    // ⭐ CHANGE: Use historical limits instead of forecast limits
+    const historicalLimits = getHistoricalDataLimits();
+    
+    if (historicalLimits.minDate && newEvent.startDate < historicalLimits.minDate)
+      return alert(`Start date must be on or after ${historicalLimits.minDate} (historical data start)`);
+    if (historicalLimits.maxDate && newEvent.startDate > historicalLimits.maxDate)
+      return alert(`Start date must be on or before ${historicalLimits.maxDate} (historical data end)`);
+    if (newEvent.endDate && historicalLimits.minDate && newEvent.endDate < historicalLimits.minDate)
+      return alert(`End date must be on or after ${historicalLimits.minDate}`);
+    if (newEvent.endDate && historicalLimits.maxDate && newEvent.endDate > historicalLimits.maxDate)
+      return alert(`End date must be on or before ${historicalLimits.maxDate}`);
 
     const newStart = new Date(newEvent.startDate);
     const newEnd = newEvent.endDate ? new Date(newEvent.endDate) : newStart;
@@ -1262,7 +1295,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         formData.append("query_value", queryValue);
       }
 
-      const response = await fetch("http://127.0.0.1:5000/sales-query", {
+      const response = await fetch(API_ENDPOINTS.SALES_QUERY, {
         method: "POST",
         body: formData,
       });
@@ -1572,8 +1605,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
         />
         <main className="max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8 py-4 mt-4">
           <div className="space-y-6">
-            <div className="grid grid-cols-4 gap-4 mb-4">
-              <Card className="p-6 box col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
+              <Card className="p-6 box col-span-1 lg:col-span-2">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4 ">
                   <div>
                     <h2 className="text-center text-lg font-semibold text-gray-900 dark:text-white">
@@ -1666,24 +1699,26 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       Plan and manage events that impact beverage sales
                     </p>
                   </div>
-                  <button
-                    onClick={() => setShowEventModal(true)}
-                    disabled={!file}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${
-                      !file
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:scale-105"
-                    }`}
-                    style={{ backgroundColor: theme.chart }}
-                    title={
-                      !file
-                        ? "Upload data first to add events"
-                        : "Add a new causal event"
-                    }
-                  >
-                    <Plus size={18} />
-                    <span>Add Event</span>
-                  </button>
+
+
+                    <button
+                      onClick={() => setShowEventModal(true)}  // ⭐ CHANGE: Should open modal, not add event
+                      disabled={!file}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-white transition-all ${
+                        !file
+                          ? "opacity-50 cursor-not-allowed"
+                          : "hover:scale-105"
+                      }`}
+                      style={{ backgroundColor: theme.chart }}
+                      title={
+                        !file
+                          ? "Upload data first to add events"
+                          : "Add a new causal event"
+                      }
+                    >
+                      <Plus size={18} />
+                      <span> Add Event </span>
+                    </button>
                 </div>
                 <div className="space-y-2">
                   {causalEvents.length === 0 ? (
@@ -1749,8 +1784,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       onClick={() => setShowEventModal(false)}
                     />
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
-                      <div className="w-full max-w-lg relative pointer-events-auto">
-                        <Card className="p-6">
+                      <div className="w-full max-w-lg mx-4 sm:mx-auto relative pointer-events-auto max-h-[90vh] overflow-y-auto">  {/* ⭐ ADD max-h and overflow */}
+                        <Card className="p-4 sm:p-6">  {/* ⭐ CHANGE p-6 to p-4 sm:p-6 */}
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                               Add Causal Event
@@ -1804,7 +1839,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                 ))}
                               </select>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">  {/* ⭐ CHANGE grid-cols-2 to grid-cols-1 sm:grid-cols-2 */}
                               <div>
                                 <div className="flex items-center mb-2 relative">
                                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1835,8 +1870,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                         startDate: e.target.value,
                                       })
                                     }
-                                    min={today}
-                                    max={forecastLimits.maxDate || undefined}
+                                    min={historicalLimits.minDate || today}  // ⭐ CHANGE THIS
+                                    max={historicalLimits.maxDate || undefined}  // ⭐ CHANGE THIS
                                     className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
                                   />
                                   <button
@@ -1886,8 +1921,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                         endDate: e.target.value,
                                       })
                                     }
-                                    min={newEvent.startDate || today}
-                                    max={forecastLimits.maxDate || undefined}
+                                    min={newEvent.startDate || historicalLimits.minDate || today}  // ⭐ CHANGE THIS
+                                    max={historicalLimits.maxDate || undefined}  // ⭐ CHANGE THIS
                                     className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:border-transparent text-gray-900 dark:text-white pr-10 hide-calendar-icon"
                                   />
                                   <button
@@ -1974,6 +2009,16 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                                 placeholder="Additional notes about this event..."
                               />
                             </div>
+
+                            {/* Date Range Info */}
+                              {historicalLimits.minDate && historicalLimits.maxDate && (
+                                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                                  <p className="text-xs text-blue-800 dark:text-blue-400">
+                                    📅 Available date range: <strong>{historicalLimits.minDate}</strong> to <strong>{historicalLimits.maxDate}</strong>
+                                  </p>
+                                </div>
+                              )}
+
                             <button
                               onClick={handleAddEvent}
                               disabled={isLoading}
@@ -2046,7 +2091,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
                       return (
                         <>
-                          <div style={{ height: 320 }}>
+                          <div className="w-full" style={{ minHeight: 280, height: "auto" }}>
                             <ResponsiveContainer width="100%" height="100%">
                               <ComposedChart
                                 data={chartData}
@@ -2274,7 +2319,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
                     {/* KPI Cards for Forecast */}
                     {forecastPayload && displayData.length > 0 && (
-                      <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
                           <div className="text-xs font-medium text-green-800 dark:text-green-400">
                             Avg Sales
@@ -2351,7 +2396,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
 
                     {displayData.some((d) => d.actual !== null) ? (
                       <>
-                        <div style={{ height: 320 }}>
+                        <div className="w-full" style={{ minHeight: 280, height: "auto" }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={displayData.filter(
@@ -2499,7 +2544,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                         </div>
 
                         {/* KPI Cards for Historical */}
-                        <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {(() => {
                             const historicalData = displayData.filter(
                               (d) => d.actual !== null && d.actual > 0
@@ -2769,7 +2814,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                           </div>
 
                           {/* Key Metrics */}
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                             <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-800">
                               <div className="text-xs font-medium text-blue-800 dark:text-blue-400">
                                 Total Sales
@@ -2897,7 +2942,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                     <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">
                       Top Store Buyers
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {storeAnalytics.top_buyers?.length > 6 && (
                         <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
                           Show {storeAnalytics.top_buyers.length - 6} more
@@ -2941,7 +2986,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 {decisionSupport.generated_by}
               </p>
               {/* Key Metrics Dashboard */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
                 <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700">
                   <div className="text-xs font-medium text-gray-600 dark:text-gray-400">
                     Total Sales
@@ -3000,7 +3045,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                   <h4 className="text-md font-semibold text-purple-900 dark:text-purple-300 mb-3">
                     Top Store Performance
                   </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
                       <div className="text-xs text-gray-600 dark:text-gray-400">
                         Top Performer
@@ -3142,8 +3187,8 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                 </h3>
 
                 {/* Search and Filter Controls */}
-                <div className="flex flex-row items-center gap-4 mb-4">
-                  <div className="w-1/3">
+                <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">  {/* ⭐ CHANGED */}
+                  <div className="w-full sm:w-1/3">  {/* ⭐ CHANGED */}
                     <select
                       value={storeStatusFilter}
                       onChange={(e) => {
@@ -3161,7 +3206,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
                       <option value="stable">Stable</option>
                     </select>
                   </div>
-                  <div className="w-2/3">
+                  <div className="w-full sm:w-2/3">  {/* ⭐ CHANGED */}
                     <div className="relative">
                       <input
                         type="text"
@@ -3475,7 +3520,7 @@ const CausalAnalysis = ({ onNavigate, onBack }) => {
               <div className="space-y-3">
                 {featureImportance.slice(0, 8).map((f, i) => (
                   <div key={i} className="space-y-2">
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-smf">
                       <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">
                         {f.feature}
                       </span>

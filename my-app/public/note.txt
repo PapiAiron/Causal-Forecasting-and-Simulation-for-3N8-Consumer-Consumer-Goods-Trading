@@ -36,3 +36,6 @@ python app.py
 #FRONTEND
 cd my-app
 npm run dev
+
+
+gunicorn

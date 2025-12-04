@@ -10,7 +10,13 @@ from prophet.diagnostics import cross_validation, performance_metrics
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 app = Flask(__name__)
-CORS(app)
+# Allow requests from your Firebase hosting domain
+CORS(app, origins=[
+    "https://causalforecastingandsimulation.web.app",
+    "https://causalforecastingandsimulation.firebaseapp.com",
+    "http://localhost:3000",  # For local development
+    "http://localhost:5173"   # For Vite dev server
+], supports_credentials=True)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "prophet_sales_forecast.pkl")
 SAVED_MODEL = None
